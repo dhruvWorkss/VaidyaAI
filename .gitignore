@@ -1,0 +1,25 @@
+# Python
+backend/venv/
+backend/__pycache__/
+**/__pycache__/
+backend/.env
+*.pyc
+*.pyo
+
+# Node
+frontend/node_modules/
+frontend/.env
+frontend/build/
+
+# Cursor
+.cursor/
+
+# VS Code
+.vscode/
+
+# Git should only track VaidyaAI project files
+# Ignore everything outside project scope
+AppData/
+Application Data/
+Cookies/
+Documents/
