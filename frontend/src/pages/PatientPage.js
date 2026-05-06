@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { speakText, transcribeAudio } from '../services/api';
+import { speakText, transcribeAudio, analyzeReport } from '../services/api';
 import { FiMic, FiSquare, FiSend, FiPaperclip, FiGlobe } from 'react-icons/fi';
 import ReactMarkdown from 'react-markdown';
 import DnaLogo from '../components/DnaLogo';
@@ -97,8 +97,19 @@ export default function PatientPage({ sessionId, isHome, onFirstMessage, onUpdat
   const handleFile = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    const text = `I have uploaded a medical report called "${file.name}". Please analyse it and explain everything in simple words, avoiding complex medical jargon.`;
-    send(text);
+
+    addMsg('user', `📎 Uploaded: ${file.name}`);
+    setIsLoading(true);
+
+    try {
+      const data = await analyzeReport(file, language);
+      addMsg('assistant', data.analysis);
+    } catch (err) {
+      addMsg('assistant', 'Could not analyze the report. Please try again or type the values manually.');
+    } finally {
+      setIsLoading(false);
+      e.target.value = '';
+    }
   };
 
   const startRec = async () => {
@@ -203,7 +214,6 @@ export default function PatientPage({ sessionId, isHome, onFirstMessage, onUpdat
           {messages.map((msg, i) => {
             const risk = msg.role === 'assistant' ? getRisk(msg.content) : null;
 
-            // USER MESSAGE
             if (msg.role === 'user') {
               return (
                 <div key={i} className="msg-anim" style={S.userRow}>
@@ -214,7 +224,6 @@ export default function PatientPage({ sessionId, isHome, onFirstMessage, onUpdat
               );
             }
 
-            // AI MESSAGE
             return (
               <div key={i} className="msg-anim" style={S.aiRow}>
                 <div style={S.aiAvatar}>
@@ -274,7 +283,6 @@ export default function PatientPage({ sessionId, isHome, onFirstMessage, onUpdat
             );
           })}
 
-          {/* DNA spinning loader */}
           {isLoading && (
             <div className="msg-anim" style={S.aiRow}>
               <div style={S.aiAvatar}>
@@ -434,8 +442,6 @@ const S = {
     padding: '32px 24px 8px',
     display: 'flex', flexDirection: 'column', gap: '24px',
   },
-
-  // USER message row — aligns to the RIGHT
   userRow: {
     display: 'flex',
     justifyContent: 'flex-end',
@@ -453,8 +459,6 @@ const S = {
     maxWidth: '65%',
     wordBreak: 'break-word',
   },
-
-  // AI message row — aligns to the LEFT
   aiRow: {
     display: 'flex',
     alignItems: 'flex-start',
@@ -474,7 +478,6 @@ const S = {
     lineHeight: '1.75',
     color: 'var(--text)',
   },
-
   stickyInput: {
     padding: '12px 24px 16px', flexShrink: 0,
     maxWidth: '760px', width: '100%', margin: '0 auto',

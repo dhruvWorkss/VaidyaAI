@@ -60,3 +60,22 @@ def clear_session(session_id: str):
   "session_id": "test123",
   "language": "en"
 }
+
+from app.services.report_analyzer import analyze_report
+
+@router.post("/analyze-report")
+async def analyze_medical_report(
+    file: UploadFile = File(...),
+    language: str = "en"
+):
+    """
+    Accepts a medical report file (PDF, image, txt),
+    extracts text and returns a simple explanation.
+    """
+    file_bytes = await file.read()
+    result = analyze_report(file_bytes, file.filename, language)
+    return {
+        "analysis": result,
+        "filename": file.filename,
+        "language": language
+    }
