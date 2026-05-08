@@ -19,6 +19,12 @@ app.add_middleware(
 
 app.include_router(triage.router, prefix="/api/triage", tags=["Triage"])
 
+@app.on_event("startup")
+def startup():
+    from app.models.database import create_tables
+    create_tables()
+    print("Database tables created successfully")
+
 @app.get("/")
 def root():
     return {

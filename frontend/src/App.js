@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import Sidebar from './components/Sidebar';
 import PatientPage from './pages/PatientPage';
@@ -8,11 +8,13 @@ import './index.css';
 export default function App() {
   const [convos, setConvos] = useState([]);
   const [activeId, setActiveId] = useState('home');
+  const currentSessionRef = useRef('home');
 
   const newConvo = () => {
     const id = Date.now().toString();
     setConvos(prev => [{ id, title: 'New consultation' }, ...prev]);
     setActiveId(id);
+    currentSessionRef.current = id;
     return id;
   };
 
@@ -32,7 +34,6 @@ export default function App() {
         <Routes>
           <Route path="/" element={
             <PatientPage
-              key={activeId}
               sessionId={activeId}
               isHome={activeId === 'home'}
               onFirstMessage={newConvo}

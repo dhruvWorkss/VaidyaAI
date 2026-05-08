@@ -56,9 +56,8 @@ export default function PatientPage({ sessionId, isHome, onFirstMessage, onUpdat
     let sid = activeSession;
 
     if (sid === 'home') {
-      const newId = onFirstMessage();
-      setActiveSession(newId);
-      sid = newId;
+      sid = onFirstMessage();
+      setActiveSession(sid);
     }
 
     if (!titleSet.current && onUpdateTitle) {
@@ -82,10 +81,12 @@ export default function PatientPage({ sessionId, isHome, onFirstMessage, onUpdat
       });
       const data = await response.json();
       addMsg('assistant', data.response);
-      try {
-        const blob = await speakText(data.response, language);
-        new Audio(URL.createObjectURL(blob)).play();
-      } catch (_) {}
+
+      // Play TTS in background without blocking UI
+      speakText(data.response, language)
+        .then(blob => new Audio(URL.createObjectURL(blob)).play())
+        .catch(() => {});
+
     } catch (err) {
       console.error('Error:', err);
       addMsg('assistant', 'Something went wrong. Please try again.');
