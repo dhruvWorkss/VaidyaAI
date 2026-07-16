@@ -1,0 +1,72 @@
+FEVER
+A fever is a temporary increase in body temperature, often due to an illness.
+Normal body temperature is around 98.6°F (37°C).
+A fever is generally defined as a temperature above 100.4°F (38°C).
+High fever above 103°F requires immediate medical attention.
+Fever with stiff neck, severe headache, or rash may indicate meningitis - emergency.
+Fever in infants under 3 months always requires immediate medical evaluation.
+Common causes: viral infections, bacterial infections, heat exhaustion, certain medications.
+Treatment: rest, hydration, acetaminophen or ibuprofen for adults.
+
+HEADACHE
+Headaches are pain in any region of the head.
+Tension headaches are the most common type - feel like pressure around the head.
+Migraine headaches cause severe throbbing pain, often with nausea and light sensitivity.
+Warning signs requiring emergency care: sudden severe headache, headache with fever and stiff neck, headache after head injury, headache with confusion or vision changes.
+Cluster headaches cause severe pain around one eye.
+Chronic headaches occurring more than 15 days per month need medical evaluation.
+
+CHEST PAIN
+Chest pain is always a serious symptom requiring immediate evaluation.
+Heart attack symptoms: crushing chest pain, pain radiating to arm or jaw, sweating, shortness of breath.
+Call emergency services immediately if chest pain is accompanied by shortness of breath.
+Not all chest pain is cardiac - can be due to muscle strain, acid reflux, or anxiety.
+Pleuritic chest pain worsens with breathing and may indicate pneumonia or pulmonary embolism.
+Any new chest pain should be evaluated by a doctor within hours.
+
+BREATHING DIFFICULTY
+Shortness of breath can range from mild to life-threatening.
+Emergency signs: severe shortness of breath at rest, blue lips or fingertips, inability to speak in full sentences.
+Common causes: asthma, COPD, pneumonia, heart failure, anxiety, anemia.
+Asthma attacks with no relief from inhaler require emergency care.
+COVID-19 can cause breathing difficulties - seek medical care if oxygen levels drop below 94%.
+
+ABDOMINAL PAIN
+Location of pain helps identify cause: right upper quadrant suggests liver/gallbladder, left lower quadrant suggests colon issues.
+Appendicitis: pain starting around navel moving to right lower quadrant, with fever and nausea - emergency.
+Severe sudden abdominal pain may indicate perforation or rupture - emergency.
+Pain with vomiting blood or black stools requires immediate evaluation.
+Mild cramping with diarrhea often indicates gastroenteritis - manage with hydration.
+
+DIABETES WARNING SIGNS
+High blood sugar symptoms: excessive thirst, frequent urination, blurred vision, fatigue.
+Low blood sugar symptoms: shakiness, sweating, confusion, rapid heartbeat.
+Diabetic ketoacidosis: fruity breath, extreme thirst, vomiting - emergency.
+Patients with diabetes should monitor blood sugar regularly.
+Target blood sugar: 80-130 mg/dL before meals, less than 180 mg/dL after meals.
+
+HYPERTENSION
+Normal blood pressure is below 120/80 mmHg.
+Stage 1 hypertension: 130-139/80-89 mmHg.
+Stage 2 hypertension: 140+/90+ mmHg requires medication.
+Hypertensive crisis: above 180/120 mmHg - emergency, seek immediate care.
+Symptoms of dangerously high BP: severe headache, vision changes, chest pain, difficulty breathing.
+
+PEDIATRIC EMERGENCIES
+Fever above 100.4°F in infants under 3 months - immediate emergency.
+Difficulty breathing in children - emergency.
+Severe dehydration signs: no tears, dry mouth, no urination for 8 hours - emergency.
+Seizures in children lasting more than 5 minutes - emergency.
+Rash with fever in children should always be evaluated by a doctor.
+
+MENTAL HEALTH CRISIS
+Suicidal thoughts or self-harm ideation - immediate crisis intervention needed.
+Severe anxiety attacks with chest pain should be evaluated to rule out cardiac causes.
+Psychosis symptoms: hallucinations, severe confusion, disorganized behavior - emergency.
+Depression with inability to function for more than 2 weeks needs professional evaluation.
+
+COMMON INFECTIONS
+Urinary tract infections: burning urination, frequent urination, pelvic pain.
+Upper respiratory infections: runny nose, sore throat, mild fever - usually viral, rest and fluids.
+Skin infections with red streaking, warmth, and fever may indicate cellulitis - needs antibiotics.
+Sexually transmitted infections should be tested and treated promptly.

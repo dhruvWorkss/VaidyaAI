@@ -28,4 +28,4 @@ def root():
         "status": "VaidyaAI backend is running",
         "env": APP_ENV,
         "groq_key_loaded": bool(GROQ_API_KEY)
-    }   
+    }
