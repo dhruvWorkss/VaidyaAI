@@ -1,4 +1,4 @@
-const BASE_URL = 'http://localhost:8000/api';
+ const BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api';
 
 export const sendMessage = async (message, sessionId, language = 'en') => {
   const response = await fetch(`${BASE_URL}/triage/chat`, {
