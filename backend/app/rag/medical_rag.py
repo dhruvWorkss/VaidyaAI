@@ -42,32 +42,44 @@ def build_vector_store():
     )
     chunks = splitter.split_documents(all_docs)
     print(f"Split into {len(chunks)} chunks")
-    
+
     # Create FAISS vector store and save it
     vector_store = FAISS.from_documents(chunks, embeddings)
     vector_store.save_local(FAISS_INDEX_PATH)
     print(f"FAISS index saved to {FAISS_INDEX_PATH}")
-    
+
+    global _vector_store
+    _vector_store = vector_store
     return vector_store
+
+
+# Cached across requests. Loading the embedding model costs hundreds of ms, so
+# doing it per query made every triage response noticeably slower.
+_vector_store = None
 
 
 def load_vector_store():
     """
-    Loads the existing FAISS index from disk.
-    If it doesn't exist, builds it first.
+    Loads the existing FAISS index from disk, caching it for subsequent calls.
+    If the index doesn't exist, builds it first.
     """
-    embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL)
-    
+    global _vector_store
+    if _vector_store is not None:
+        return _vector_store
+
     if not os.path.exists(FAISS_INDEX_PATH):
         print("FAISS index not found — building it now...")
-        return build_vector_store()
-    
+        _vector_store = build_vector_store()
+        return _vector_store
+
     print("Loading existing FAISS index...")
-    return FAISS.load_local(
-        FAISS_INDEX_PATH, 
+    embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL)
+    _vector_store = FAISS.load_local(
+        FAISS_INDEX_PATH,
         embeddings,
         allow_dangerous_deserialization=True
     )
+    return _vector_store
 
 
 def retrieve_medical_context(query: str, k: int = 3) -> str:

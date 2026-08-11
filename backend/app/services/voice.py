@@ -1,32 +1,31 @@
-import whisper
 import tempfile
 import os
+from groq import Groq
 from gtts import gTTS
+from app.utils.config import GROQ_API_KEY, WHISPER_MODEL
 
-# Load Whisper model once at startup — "base" is fast and accurate enough
-# Options: tiny, base, small, medium, large (larger = more accurate but slower)
-model = whisper.load_model("base")
+# Transcription runs on Groq's hosted Whisper rather than a local model.
+# Running whisper locally pulled in torch (~2GB) and downloaded weights on first
+# request, which made the container too heavy to deploy on a small instance.
+client = Groq(api_key=GROQ_API_KEY)
+
 
 def transcribe_audio(audio_bytes: bytes) -> dict:
     """
-    Takes raw audio bytes, saves to a temp file,
-    runs Whisper on it, returns transcribed text + detected language.
+    Takes raw audio bytes, sends them to Groq's Whisper endpoint,
+    returns transcribed text + detected language.
     """
-    # Save audio bytes to a temporary file
-    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
-        tmp.write(audio_bytes)
-        tmp_path = tmp.name
+    result = client.audio.transcriptions.create(
+        file=("recording.wav", audio_bytes),
+        model=WHISPER_MODEL,
+        response_format="verbose_json",
+    )
 
-    try:
-        # Whisper transcribes and also detects the language automatically
-        result = model.transcribe(tmp_path)
-        return {
-            "text": result["text"].strip(),
-            "language": result["language"]  # returns "hi", "kn", "en" etc.
-        }
-    finally:
-        # Always clean up the temp file
-        os.unlink(tmp_path)
+    return {
+        "text": (result.text or "").strip(),
+        # verbose_json reports the detected language, e.g. "hi", "kn", "en"
+        "language": getattr(result, "language", "en") or "en",
+    }
 
 
 def text_to_speech(text: str, language: str = "en") -> bytes:
@@ -34,17 +33,17 @@ def text_to_speech(text: str, language: str = "en") -> bytes:
     Converts text to speech using gTTS.
     Returns audio as bytes so FastAPI can send it back to the browser.
     """
-    # Map Whisper language codes to gTTS language codes
+    # Whisper sometimes reports full names ("hindi") rather than codes ("hi"),
+    # so both spellings map to the same gTTS code.
     lang_map = {
-        "hi": "hi",   # Hindi
-        "kn": "kn",   # Kannada
-        "en": "en",   # English
+        "hi": "hi", "hindi": "hi",
+        "kn": "kn", "kannada": "kn",
+        "en": "en", "english": "en",
     }
-    lang = lang_map.get(language, "en")
+    lang = lang_map.get((language or "en").lower(), "en")
 
     tts = gTTS(text=text, lang=lang, slow=False)
 
-    # Save to temp file, read bytes, delete
     with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmp:
         tts.save(tmp.name)
         tmp_path = tmp.name
