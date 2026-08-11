@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { speakText, transcribeAudio, analyzeReport } from '../services/api';
+import { speakText, transcribeAudio, analyzeReport, sendMessage } from '../services/api';
 import { FiMic, FiSquare, FiSend, FiPaperclip, FiGlobe } from 'react-icons/fi';
 import ReactMarkdown from 'react-markdown';
 import DnaLogo from '../components/DnaLogo';
@@ -70,16 +70,7 @@ export default function PatientPage({ sessionId, isHome, onFirstMessage, onUpdat
     setIsLoading(true);
 
     try {
-      const response = await fetch('http://localhost:8000/api/triage/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message: text,
-          session_id: sid,
-          language: language,
-        }),
-      });
-      const data = await response.json();
+      const data = await sendMessage(text, sid, language);
       addMsg('assistant', data.response);
 
       // Play TTS in background without blocking UI
@@ -156,7 +147,7 @@ export default function PatientPage({ sessionId, isHome, onFirstMessage, onUpdat
         <div style={S.planBadge}>
           Free plan · <span style={{ color: 'var(--accent)' }}>Upgrade</span>
         </div>
-        <div style={{ position: 'relative' }}>
+        <div style={S.langWrap}>
           <button style={S.langBtn} onClick={() => setShowLang(p => !p)}>
             <FiGlobe size={13} />
             <span>{LANGS.find(l => l.code === language)?.label}</span>
@@ -253,14 +244,14 @@ export default function PatientPage({ sessionId, isHome, onFirstMessage, onUpdat
                         strong: ({ node, ...props }) => (
                           <strong style={{ color: '#4ade80', fontWeight: '600' }} {...props} />
                         ),
-                        h1: ({ node, ...props }) => (
-                          <h1 style={{ fontSize: '16px', fontWeight: '700', marginBottom: '10px', color: 'var(--text)' }} {...props} />
+                        h1: ({ node, children, ...props }) => (
+                          <h1 style={{ fontSize: '16px', fontWeight: '700', marginBottom: '10px', color: 'var(--text)' }} {...props}>{children}</h1>
                         ),
-                        h2: ({ node, ...props }) => (
-                          <h2 style={{ fontSize: '15px', fontWeight: '600', marginBottom: '8px', color: 'var(--text)' }} {...props} />
+                        h2: ({ node, children, ...props }) => (
+                          <h2 style={{ fontSize: '15px', fontWeight: '600', marginBottom: '8px', color: 'var(--text)' }} {...props}>{children}</h2>
                         ),
-                        h3: ({ node, ...props }) => (
-                          <h3 style={{ fontSize: '14px', fontWeight: '600', marginBottom: '6px', color: 'var(--text)' }} {...props} />
+                        h3: ({ node, children, ...props }) => (
+                          <h3 style={{ fontSize: '14px', fontWeight: '600', marginBottom: '6px', color: 'var(--text)' }} {...props}>{children}</h3>
                         ),
                         hr: ({ node, ...props }) => (
                           <hr style={{ border: 'none', borderTop: '1px solid var(--border)', margin: '12px 0' }} {...props} />
@@ -392,12 +383,17 @@ const S = {
     background: 'var(--surface)', border: '1px solid var(--border)',
     padding: '4px 12px', borderRadius: '20px',
   },
+  // Pinned to the top bar's right edge. The button itself stays in normal flow
+  // so it can't overlap the centred plan badge; the dropdown anchors to this.
+  langWrap: {
+    position: 'absolute', right: '24px', top: '50%',
+    transform: 'translateY(-50%)',
+  },
   langBtn: {
     display: 'flex', alignItems: 'center', gap: '6px',
     fontSize: '12px', color: 'var(--text-muted)',
     background: 'var(--surface)', border: '1px solid var(--border)',
     padding: '4px 12px', borderRadius: '20px', cursor: 'pointer',
-    position: 'absolute', right: '24px', top: '10px',
   },
   langDrop: {
     position: 'absolute', top: '110%', right: 0,
