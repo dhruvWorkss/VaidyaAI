@@ -1,6 +1,6 @@
 import os
 from langchain_community.vectorstores import FAISS
-from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_community.embeddings.fastembed import FastEmbedEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import TextLoader
 
@@ -8,8 +8,9 @@ from langchain_community.document_loaders import TextLoader
 DOCS_PATH = os.path.join(os.path.dirname(__file__), "../../data/medical_docs")
 FAISS_INDEX_PATH = os.path.join(os.path.dirname(__file__), "../../data/faiss_index")
 
-# We use a free HuggingFace embedding model — no API key needed
-# This converts text into vectors so FAISS can search them
+# Same MiniLM weights as before, but served through fastembed's ONNX runtime
+# instead of sentence-transformers. That drops the torch dependency, taking the
+# container from ~2GB to ~250MB so it fits a small instance. No API key needed.
 EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 
 
@@ -21,7 +22,7 @@ def build_vector_store():
     """
     print("Building FAISS vector store from medical docs...")
     
-    embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL)
+    embeddings = FastEmbedEmbeddings(model_name=EMBEDDING_MODEL)
     
     all_docs = []
     
@@ -73,7 +74,7 @@ def load_vector_store():
         return _vector_store
 
     print("Loading existing FAISS index...")
-    embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL)
+    embeddings = FastEmbedEmbeddings(model_name=EMBEDDING_MODEL)
     _vector_store = FAISS.load_local(
         FAISS_INDEX_PATH,
         embeddings,
