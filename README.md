@@ -10,13 +10,21 @@ VaidyaAI helps patients describe symptoms, get instant triage assessments, and u
 
 ## Features
 
-- 🎙️ **Voice Input** — Speak symptoms in English, Hindi, or Kannada (Whisper STT)
+- 🎙️ **Voice Input** — Speak symptoms in English, Hindi, or Kannada (Whisper STT via Groq)
 - 🤖 **AI Triage Agent** — LangChain + Groq LLM assesses urgency and recommends specialists
-- 📚 **RAG Medical Knowledge** — FAISS vector search over WHO symptom guides and ICD-11 codes
+- 📚 **RAG Medical Knowledge** — FAISS vector search over a curated symptom knowledge base
 - 📄 **Medical Report Analyser** — Upload blood reports/PDFs, get simple explanations
 - 🗣️ **Text-to-Speech** — Agent responses spoken aloud in patient's language
-- 🏥 **Doctor Dashboard** — Real-time patient queue with risk levels and conversation history
-- 🗄️ **PostgreSQL** — All sessions and conversations saved permanently
+- 🏥 **Doctor Dashboard** — Patient queue with risk levels and full conversation history
+- 🗄️ **Persistent sessions** — Conversations stored in Postgres (SQLite by default locally)
+
+### Triage safety model
+
+The LLM produces a structured assessment, and a deterministic keyword check runs
+alongside it purely as a safety net — if it detects emergency symptoms the model
+may have understated, an emergency banner is prepended to the reply. It never
+appends a competing risk level, so a response can't show two different verdicts.
+A session's stored risk level only ever escalates, never downgrades.
 
 ---
 
