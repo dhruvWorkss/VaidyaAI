@@ -40,3 +40,13 @@ export const analyzeReport = async (file, language = 'en') => {
   );
   return response.json();
 };
+
+export const getSessions = async () => {
+  const response = await fetch(`${BASE_URL}/triage/sessions`);
+  return response.json();
+};
+
+export const getSession = async (id) => {
+  const response = await fetch(`${BASE_URL}/triage/sessions/${id}`);
+  return response.json();
+};

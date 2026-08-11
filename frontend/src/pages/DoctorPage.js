@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { FiActivity, FiUser, FiMessageSquare, FiArrowLeft, FiRefreshCw } from 'react-icons/fi';
 import ReactMarkdown from 'react-markdown';
 import DnaLogo from '../components/DnaLogo';
+import { getSessions, getSession } from '../services/api';
 
 const RISK_CONFIG = {
   emergency: { color: '#ef4444', label: 'Emergency', bg: '#450a0a' },
@@ -20,8 +21,7 @@ export default function DoctorPage() {
   const fetchSessions = async () => {
     setLoading(true);
     try {
-      const res = await fetch('http://localhost:8000/api/triage/sessions');
-      const data = await res.json();
+      const data = await getSessions();
       setSessions(data);
     } catch {
       setSessions([]);
@@ -33,8 +33,7 @@ export default function DoctorPage() {
   const fetchSession = async (id) => {
     setDetailLoading(true);
     try {
-      const res = await fetch(`http://localhost:8000/api/triage/sessions/${id}`);
-      const data = await res.json();
+      const data = await getSession(id);
       setSelected(data);
     } catch {
       setSelected(null);
