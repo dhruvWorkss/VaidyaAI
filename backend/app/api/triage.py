@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from datetime import datetime
 
 from app.services.voice import transcribe_audio, text_to_speech
+from app.services.report_analyzer import analyze_report
 from app.agent.triage_agent import run_triage_agent
 from app.models.database import get_db
 from app.models.session_model import TriageSession, Message
@@ -47,6 +48,14 @@ async def transcribe(audio: UploadFile = File(...)):
 async def speak(text: str, language: str = "en"):
     audio_bytes = text_to_speech(text, language)
     return Response(content=audio_bytes, media_type="audio/mpeg")
+
+
+@router.post("/analyze-report")
+async def analyze_report_route(file: UploadFile = File(...), language: str = "en"):
+    """Extracts text from an uploaded report and explains it in plain language."""
+    file_bytes = await file.read()
+    analysis = analyze_report(file_bytes, file.filename or "report", language)
+    return {"analysis": analysis}
 
 
 @router.post("/chat")
