@@ -167,10 +167,3 @@ The frontend is a static CRA build — point the host at `frontend/` and set
 VaidyaAI provides triage guidance only. It is not a diagnosis and does not replace
 a qualified doctor. Every response carries this disclaimer, and emergency symptoms
 are flagged for immediate medical attention.
-
----
-
-## Built By
-
-**Dhruv Pachori** — Final Year AI & Data Science, CMRIT Bangalore
-GitHub: [@dhruvWorkss](https://github.com/dhruvWorkss)
