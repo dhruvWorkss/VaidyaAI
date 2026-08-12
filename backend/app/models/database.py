@@ -15,5 +15,7 @@ def get_db():
         db.close()
 
 def create_tables():
-    from app.models.session_model import TriageSession, Message
+    # Imported for the side effect of registering the models on Base.metadata
+    # before create_all runs — without this the tables are never created.
+    from app.models.session_model import TriageSession, Message  # noqa: F401
     Base.metadata.create_all(bind=engine)

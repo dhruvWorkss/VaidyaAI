@@ -1,5 +1,4 @@
 import fitz  # pymupdf
-import os
 from app.utils.config import GROQ_API_KEY, GROQ_MODEL
 from langchain_groq import ChatGroq
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -46,11 +45,6 @@ def extract_text_from_pdf(pdf_bytes: bytes) -> str:
         return text.strip()
     except Exception as e:
         return f"Could not extract text from PDF: {str(e)}"
-
-
-def extract_text_from_image(image_bytes: bytes) -> str:
-    """For image files, return a message to use text extraction."""
-    return "Image report uploaded. Please describe the key values you see."
 
 
 def analyze_report(file_bytes: bytes, filename: str, language: str = "en") -> str:
