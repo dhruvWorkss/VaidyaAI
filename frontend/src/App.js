@@ -1,14 +1,26 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import Sidebar from './components/Sidebar';
 import PatientPage from './pages/PatientPage';
 import DoctorPage from './pages/DoctorPage';
+import { warmUpApi } from './services/api';
 import './index.css';
 
 export default function App() {
   const [convos, setConvos] = useState([]);
   const [activeId, setActiveId] = useState('home');
   const currentSessionRef = useRef('home');
+  const [serviceStatus, setServiceStatus] = useState('connecting');
+
+  useEffect(() => {
+    const controller = new AbortController();
+    warmUpApi(controller.signal)
+      .then(() => setServiceStatus('ready'))
+      .catch(err => {
+        if (err.name !== 'AbortError') setServiceStatus('offline');
+      });
+    return () => controller.abort();
+  }, []);
 
   const newConvo = () => {
     const id = Date.now().toString();
@@ -38,6 +50,7 @@ export default function App() {
               isHome={activeId === 'home'}
               onFirstMessage={newConvo}
               onUpdateTitle={updateTitle}
+              serviceStatus={serviceStatus}
             />
           } />
           <Route path="/doctor" element={<DoctorPage />} />

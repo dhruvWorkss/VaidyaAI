@@ -1,5 +1,10 @@
 const BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api';
 
+export const warmUpApi = async (signal) => {
+  const response = await fetch(`${BASE_URL}/triage/health`, { signal });
+  return parseResponse(response);
+};
+
 export class ApiError extends Error {
   constructor(message, status = null) {
     super(message);

@@ -17,7 +17,7 @@ const SUGGESTIONS = [
   { icon: '🌡️', text: 'Symptoms of diabetes' },
 ];
 
-export default function PatientPage({ sessionId, isHome, onFirstMessage, onUpdateTitle }) {
+export default function PatientPage({ sessionId, isHome, onFirstMessage, onUpdateTitle, serviceStatus = 'ready' }) {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [isRecording, setIsRecording] = useState(false);
@@ -238,7 +238,14 @@ export default function PatientPage({ sessionId, isHome, onFirstMessage, onUpdat
       <div className="medical-grid" />
       {/* Top bar */}
       <div className="topbar-glass" style={S.topbar}>
-        <div className="live-status"><span className="live-dot" /> AI health companion</div>
+        <div className={`live-status service-${serviceStatus}`}>
+          <span className="live-dot" />
+          {serviceStatus === 'connecting'
+            ? 'Starting secure service'
+            : serviceStatus === 'offline'
+              ? 'Service reconnecting'
+              : 'AI health companion ready'}
+        </div>
         <div style={S.planBadge}>
           <span className="shield-mark">✦</span> Private by design
         </div>
@@ -395,6 +402,11 @@ export default function PatientPage({ sessionId, isHome, onFirstMessage, onUpdat
               <div style={S.aiCard}>
                 <div className="typing">
                   <span /><span /><span />
+                </div>
+                <div className="loading-copy">
+                  {serviceStatus === 'connecting'
+                    ? 'Starting the secure medical service…'
+                    : 'Reviewing your message…'}
                 </div>
               </div>
             </div>

@@ -103,6 +103,9 @@ a { text-decoration: none; color: inherit; }
   color: var(--text-sub); font-size: 11px; letter-spacing: .07em; text-transform: uppercase;
 }
 .live-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 5px rgba(52,232,158,.09), 0 0 16px var(--accent); animation: pulseDot 2s ease infinite; }
+.service-connecting .live-dot { background: #f8c35c; box-shadow: 0 0 0 5px rgba(248,195,92,.09), 0 0 16px #f8c35c; }
+.service-offline .live-dot { background: #ff7b72; box-shadow: 0 0 0 5px rgba(255,123,114,.09), 0 0 16px #ff7b72; }
+.loading-copy { display: inline-block; margin-left: 9px; color: var(--text-muted); font-size: 11px; vertical-align: middle; }
 .shield-mark { color: var(--accent); margin-right: 4px; }
 
 .home-stage { animation: revealStage .7s cubic-bezier(.2,.8,.2,1) both; }
