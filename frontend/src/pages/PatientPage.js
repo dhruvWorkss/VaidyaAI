@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { speakText, transcribeAudio, analyzeReport, sendMessage } from '../services/api';
 import { FiMic, FiSquare, FiSend, FiPaperclip, FiGlobe, FiVolume2 } from 'react-icons/fi';
 import ReactMarkdown from 'react-markdown';
@@ -38,6 +38,14 @@ export default function PatientPage({ sessionId, isHome, onFirstMessage, onUpdat
   const requestIdRef = useRef(0);
   const audioRef = useRef(null);
   const speechControllerRef = useRef(null);
+
+  useLayoutEffect(() => {
+    // Browsers can restore the document's old scroll offset across a deploy or
+    // refresh. Reset it before paint; the app shell itself must never scroll.
+    window.scrollTo(0, 0);
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+  }, []);
 
   useEffect(() => () => {
     requestControllerRef.current?.abort();
