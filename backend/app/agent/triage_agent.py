@@ -2,6 +2,7 @@ from langchain_groq import ChatGroq
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from app.utils.config import GROQ_API_KEY, GROQ_MODEL
 from app.rag.medical_rag import retrieve_medical_context
+import re
 
 llm = ChatGroq(
     api_key=GROQ_API_KEY,
@@ -53,7 +54,13 @@ def recommend_specialist(symptoms: str) -> str:
 
 SYSTEM_PROMPT = """You are VaidyaAI, a knowledgeable and empathetic AI medical triage assistant.
 
-After hearing symptoms, always respond in this structured format:
+Conversation style:
+- For greetings, thanks, and casual conversation, reply naturally and warmly in 1-2 sentences
+- When a user only greets you, welcome them and ask how they are feeling today or whether they want guidance about a health issue
+- Do not say that the user has failed to provide symptoms or is "reaching out for help"
+- Only use the structured medical format below after the user describes symptoms or asks a health question
+
+After hearing symptoms or a health concern, respond in this structured format:
 
 **Assessment**
 Brief summary of what the symptoms suggest.
@@ -81,11 +88,49 @@ Rules:
 - If emergency symptoms detected, flag immediately at the top"""
 
 
+GREETING_REPLIES = {
+    "en": "Hi! How are you feeling today? Is there any health issue you'd like guidance with?",
+    "hi": "नमस्ते! आज आप कैसा महसूस कर रहे हैं? क्या किसी स्वास्थ्य समस्या के बारे में मार्गदर्शन चाहिए?",
+    "kn": "ನಮಸ್ಕಾರ! ಇಂದು ನಿಮಗೆ ಹೇಗನಿಸುತ್ತಿದೆ? ಯಾವುದಾದರೂ ಆರೋಗ್ಯ ಸಮಸ್ಯೆಯ ಬಗ್ಗೆ ಮಾರ್ಗದರ್ಶನ ಬೇಕೇ?",
+}
+
+
+def greeting_reply(message: str) -> str | None:
+    """Return an instant, friendly welcome for greeting-only messages."""
+    # Strip common sentence punctuation without removing Unicode combining
+    # marks, which are part of many Hindi and Kannada characters.
+    normalized = message.lower().strip().strip("!.,?।…")
+    normalized = re.sub(r"\s+", " ", normalized)
+
+    english_greetings = {
+        "hi", "hello", "hey", "hiya", "good morning", "good afternoon",
+        "good evening", "how are you", "what's up", "whats up", "sup",
+    }
+    hindi_greetings = {"नमस्ते", "नमस्कार", "हेलो", "हाय"}
+    kannada_greetings = {"ನಮಸ್ಕಾರ", "ಹಲೋ", "ಹಾಯ್"}
+
+    if normalized in hindi_greetings:
+        return GREETING_REPLIES["hi"]
+    if normalized in kannada_greetings:
+        return GREETING_REPLIES["kn"]
+    if normalized in english_greetings:
+        return GREETING_REPLIES["en"]
+    return None
+
+
 def run_triage_agent(user_message: str, chat_history: list = None) -> dict:
     """
     Runs one turn of triage. Returns the assistant reply plus the structured
     risk level and specialist, so the caller can persist them.
     """
+    welcome = greeting_reply(user_message)
+    if welcome:
+        return {
+            "response": welcome,
+            "risk_level": None,
+            "specialist": None,
+        }
+
     chat_history = chat_history or []
     medical_context = retrieve_medical_context(user_message)
 

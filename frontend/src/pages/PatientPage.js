@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { speakText, transcribeAudio, analyzeReport, sendMessage } from '../services/api';
-import { FiMic, FiSquare, FiSend, FiPaperclip, FiGlobe } from 'react-icons/fi';
+import { FiMic, FiSquare, FiSend, FiPaperclip, FiGlobe, FiVolume2 } from 'react-icons/fi';
 import ReactMarkdown from 'react-markdown';
 import DnaLogo from '../components/DnaLogo';
 
@@ -26,6 +26,7 @@ export default function PatientPage({ sessionId, isHome, onFirstMessage, onUpdat
   const [showLang, setShowLang] = useState(false);
   const [recordSecs, setRecordSecs] = useState(0);
   const [activeSession, setActiveSession] = useState(sessionId);
+  const [speakingMessage, setSpeakingMessage] = useState(null);
 
   const recorderRef = useRef(null);
   const chunksRef = useRef([]);
@@ -33,6 +34,16 @@ export default function PatientPage({ sessionId, isHome, onFirstMessage, onUpdat
   const timerRef = useRef(null);
   const titleSet = useRef(false);
   const fileRef = useRef(null);
+  const requestControllerRef = useRef(null);
+  const requestIdRef = useRef(0);
+  const audioRef = useRef(null);
+  const speechControllerRef = useRef(null);
+
+  useEffect(() => () => {
+    requestControllerRef.current?.abort();
+    speechControllerRef.current?.abort();
+    audioRef.current?.pause();
+  }, []);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -68,21 +79,81 @@ export default function PatientPage({ sessionId, isHome, onFirstMessage, onUpdat
     addMsg('user', text);
     setInput('');
     setIsLoading(true);
+    const controller = new AbortController();
+    const requestId = ++requestIdRef.current;
+    requestControllerRef.current = controller;
 
     try {
-      const data = await sendMessage(text, sid, language);
+      const data = await sendMessage(text, sid, language, controller.signal);
+      if (requestId !== requestIdRef.current) return;
       addMsg('assistant', data.response);
 
-      // Play TTS in background without blocking UI
-      speakText(data.response, language)
-        .then(blob => new Audio(URL.createObjectURL(blob)).play())
-        .catch(() => {});
-
     } catch (err) {
+      if (err.name === 'AbortError') return;
       console.error('Error:', err);
-      addMsg('assistant', 'Something went wrong. Please try again.');
+      const message = err.status === 504
+        ? 'The medical assistant took too long to respond. Please try again.'
+        : err.status === 503
+          ? 'The medical assistant is temporarily unavailable. Please try again shortly.'
+          : 'I could not reach the medical assistant. Please check your connection and try again.';
+      addMsg('assistant', message);
     } finally {
-      setIsLoading(false);
+      if (requestId === requestIdRef.current) {
+        requestControllerRef.current = null;
+        setIsLoading(false);
+      }
+    }
+  };
+
+  const stopResponse = () => {
+    if (!requestControllerRef.current) return;
+    requestIdRef.current += 1;
+    requestControllerRef.current.abort();
+    requestControllerRef.current = null;
+    setIsLoading(false);
+  };
+
+  const stopSpeaking = () => {
+    speechControllerRef.current?.abort();
+    speechControllerRef.current = null;
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+      URL.revokeObjectURL(audioRef.current.src);
+      audioRef.current = null;
+    }
+    setSpeakingMessage(null);
+  };
+
+  const readAloud = async (content, messageIndex) => {
+    if (speakingMessage === messageIndex) {
+      stopSpeaking();
+      return;
+    }
+
+    stopSpeaking();
+    const controller = new AbortController();
+    speechControllerRef.current = controller;
+    setSpeakingMessage(messageIndex);
+
+    try {
+      const blob = await speakText(content, language, controller.signal);
+      if (controller.signal.aborted) return;
+
+      const audioUrl = URL.createObjectURL(blob);
+      const audio = new Audio(audioUrl);
+      audioRef.current = audio;
+      audio.onended = () => {
+        URL.revokeObjectURL(audioUrl);
+        audioRef.current = null;
+        speechControllerRef.current = null;
+        setSpeakingMessage(null);
+      };
+      audio.onerror = audio.onended;
+      await audio.play();
+    } catch (err) {
+      if (err.name !== 'AbortError') console.error('Speech playback failed:', err);
+      if (!controller.signal.aborted) setSpeakingMessage(null);
     }
   };
 
@@ -141,11 +212,15 @@ export default function PatientPage({ sessionId, isHome, onFirstMessage, onUpdat
   const showHome = messages.length === 0;
 
   return (
-    <div style={S.page}>
+    <div className="patient-page" style={S.page}>
+      <div className="aurora aurora-one" />
+      <div className="aurora aurora-two" />
+      <div className="medical-grid" />
       {/* Top bar */}
-      <div style={S.topbar}>
+      <div className="topbar-glass" style={S.topbar}>
+        <div className="live-status"><span className="live-dot" /> AI health companion</div>
         <div style={S.planBadge}>
-          Free plan · <span style={{ color: 'var(--accent)' }}>Upgrade</span>
+          <span className="shield-mark">✦</span> Private by design
         </div>
         <div style={S.langWrap}>
           <button style={S.langBtn} onClick={() => setShowLang(p => !p)}>
@@ -173,25 +248,31 @@ export default function PatientPage({ sessionId, isHome, onFirstMessage, onUpdat
 
       {/* Home screen */}
       {showHome && (
-        <div style={S.home}>
-          <div style={S.homeHero}>
-            <DnaLogo size={56} />
-            <h1 style={S.heroTitle}>How can I help you today?</h1>
-            <p style={S.heroSub}>Describe your symptoms or upload a medical report</p>
+        <div className="home-stage" style={S.home}>
+          <div className="hero-orbit" aria-hidden="true">
+            <span className="orbit-dot orbit-dot-one" />
+            <span className="orbit-dot orbit-dot-two" />
+            <div className="hero-logo"><DnaLogo size={64} /></div>
           </div>
-          <div style={S.inputWrap}>
+          <div style={S.homeHero}>
+            <div className="hero-eyebrow">MEET YOUR AI HEALTH COMPANION</div>
+            <h1 style={S.heroTitle}>Care, <span className="gradient-text">decoded.</span></h1>
+            <p style={S.heroSub}>Tell me how you feel. I’ll help you understand what matters<br className="desktop-break" /> and what to do next.</p>
+          </div>
+          <div className="hero-input" style={S.inputWrap}>
             <InputBox
               input={input} setInput={setInput}
               onSend={() => send(input)}
               isRecording={isRecording} isLoading={isLoading}
               recordSecs={recordSecs} fmt={fmt}
               startRec={startRec} stopRec={stopRec}
+              stopResponse={stopResponse}
               fileRef={fileRef} handleFile={handleFile}
             />
           </div>
-          <div style={S.suggestions}>
+          <div className="suggestion-grid" style={S.suggestions}>
             {SUGGESTIONS.map((s, i) => (
-              <button key={i} style={S.sugBtn} onClick={() => send(s.text)}>
+              <button key={i} className="suggestion-card" style={S.sugBtn} onClick={() => send(s.text)}>
                 <span style={{ fontSize: '16px' }}>{s.icon}</span>
                 <span style={{ fontSize: '13px' }}>{s.text}</span>
               </button>
@@ -202,7 +283,7 @@ export default function PatientPage({ sessionId, isHome, onFirstMessage, onUpdat
 
       {/* Chat messages */}
       {!showHome && (
-        <div style={S.chat}>
+        <div className="chat-stream" style={S.chat}>
           {messages.map((msg, i) => {
             const risk = msg.role === 'assistant' ? getRisk(msg.content) : null;
 
@@ -226,7 +307,7 @@ export default function PatientPage({ sessionId, isHome, onFirstMessage, onUpdat
                   borderLeft: risk ? `3px solid ${risk}` : undefined,
                   paddingLeft: risk ? '14px' : undefined,
                 }}>
-                  <div style={S.aiCard}>
+                  <div className="ai-answer" style={S.aiCard}>
                     <ReactMarkdown
                       components={{
                         p: ({ node, ...props }) => (
@@ -270,6 +351,17 @@ export default function PatientPage({ sessionId, isHome, onFirstMessage, onUpdat
                       {msg.content}
                     </ReactMarkdown>
                   </div>
+                  <button
+                    style={S.readBtn}
+                    onClick={() => readAloud(msg.content, i)}
+                    title={speakingMessage === i ? 'Stop reading' : 'Read aloud'}
+                    aria-label={speakingMessage === i ? 'Stop reading' : 'Read aloud'}
+                  >
+                    {speakingMessage === i
+                      ? <FiSquare size={12} />
+                      : <FiVolume2 size={15} />}
+                    <span>{speakingMessage === i ? 'Stop' : 'Read aloud'}</span>
+                  </button>
                 </div>
               </div>
             );
@@ -293,13 +385,14 @@ export default function PatientPage({ sessionId, isHome, onFirstMessage, onUpdat
 
       {/* Sticky input */}
       {!showHome && (
-        <div style={S.stickyInput}>
+        <div className="sticky-composer" style={S.stickyInput}>
           <InputBox
             input={input} setInput={setInput}
             onSend={() => send(input)}
             isRecording={isRecording} isLoading={isLoading}
             recordSecs={recordSecs} fmt={fmt}
             startRec={startRec} stopRec={stopRec}
+            stopResponse={stopResponse}
             fileRef={fileRef} handleFile={handleFile}
           />
           <div style={S.disclaimer}>
@@ -311,9 +404,9 @@ export default function PatientPage({ sessionId, isHome, onFirstMessage, onUpdat
   );
 }
 
-function InputBox({ input, setInput, onSend, isRecording, isLoading, recordSecs, fmt, startRec, stopRec, fileRef, handleFile }) {
+function InputBox({ input, setInput, onSend, isRecording, isLoading, recordSecs, fmt, startRec, stopRec, stopResponse, fileRef, handleFile }) {
   return (
-    <div style={IB.box}>
+    <div className="composer-box" style={IB.box}>
       <textarea
         style={IB.ta}
         value={input}
@@ -353,12 +446,14 @@ function InputBox({ input, setInput, onSend, isRecording, isLoading, recordSecs,
           <button
             style={{
               ...IB.sendBtn,
-              opacity: (!input.trim() || isLoading) ? 0.35 : 1,
+              opacity: (!input.trim() && !isLoading) ? 0.35 : 1,
             }}
-            onClick={onSend}
-            disabled={!input.trim() || isLoading}
+            onClick={isLoading ? stopResponse : onSend}
+            disabled={!input.trim() && !isLoading}
+            title={isLoading ? 'Stop response' : 'Send message'}
+            aria-label={isLoading ? 'Stop response' : 'Send message'}
           >
-            <FiSend size={14} color="#fff" />
+            {isLoading ? <FiSquare size={13} color="#fff" /> : <FiSend size={14} color="#fff" />}
           </button>
         </div>
       </div>
@@ -374,14 +469,14 @@ const S = {
   topbar: {
     display: 'flex', alignItems: 'center',
     justifyContent: 'center', gap: '16px',
-    padding: '10px 24px', flexShrink: 0,
+    minHeight: '62px', padding: '10px 28px', flexShrink: 0,
     position: 'relative',
     borderBottom: '1px solid var(--border)',
   },
   planBadge: {
-    fontSize: '12px', color: 'var(--text-muted)',
-    background: 'var(--surface)', border: '1px solid var(--border)',
-    padding: '4px 12px', borderRadius: '20px',
+    fontSize: '11px', color: 'var(--text-sub)', letterSpacing: '0.03em',
+    background: 'rgba(11, 26, 32, 0.72)', border: '1px solid rgba(113, 255, 204, 0.16)',
+    padding: '7px 13px', borderRadius: '20px',
   },
   // Pinned to the top bar's right edge. The button itself stays in normal flow
   // so it can't overlap the centred plan badge; the dropdown anchors to this.
@@ -408,30 +503,31 @@ const S = {
   home: {
     flex: 1, display: 'flex', flexDirection: 'column',
     alignItems: 'center', justifyContent: 'center',
-    padding: '0 24px 40px', gap: '28px',
+    padding: '30px 24px 54px', gap: '22px',
   },
   homeHero: {
     display: 'flex', flexDirection: 'column',
-    alignItems: 'center', gap: '14px',
+    alignItems: 'center', gap: '10px',
   },
   heroTitle: {
-    fontSize: '28px', fontWeight: '600',
+    fontSize: 'clamp(42px, 6vw, 76px)', fontWeight: '720',
+    letterSpacing: '-0.055em', lineHeight: '0.98',
     color: 'var(--text)', textAlign: 'center',
   },
   heroSub: {
-    fontSize: '14px', color: 'var(--text-muted)',
-    textAlign: 'center',
+    fontSize: 'clamp(14px, 1.5vw, 17px)', color: 'var(--text-sub)',
+    textAlign: 'center', lineHeight: '1.7', maxWidth: '620px',
   },
-  inputWrap: { width: '100%', maxWidth: '680px' },
+  inputWrap: { width: '100%', maxWidth: '720px' },
   suggestions: {
     display: 'flex', flexWrap: 'wrap',
     gap: '8px', justifyContent: 'center',
-    maxWidth: '680px',
+    maxWidth: '760px',
   },
   sugBtn: {
     display: 'flex', alignItems: 'center', gap: '8px',
-    padding: '10px 16px', borderRadius: '20px',
-    border: '1px solid var(--border)', background: 'var(--surface)',
+    padding: '11px 16px', borderRadius: '16px',
+    border: '1px solid var(--border)', background: 'rgba(10, 25, 31, 0.64)',
     fontSize: '13px', color: 'var(--text-sub)', cursor: 'pointer',
   },
   chat: {
@@ -475,6 +571,11 @@ const S = {
     lineHeight: '1.75',
     color: 'var(--text)',
   },
+  readBtn: {
+    display: 'flex', alignItems: 'center', gap: '6px',
+    marginTop: '7px', padding: '5px 7px', borderRadius: '7px',
+    color: 'var(--text-muted)', fontSize: '11px', cursor: 'pointer',
+  },
   stickyInput: {
     padding: '12px 24px 16px', flexShrink: 0,
     maxWidth: '760px', width: '100%', margin: '0 auto',
@@ -487,10 +588,10 @@ const S = {
 
 const IB = {
   box: {
-    background: 'var(--surface)',
-    border: '1px solid var(--border)',
-    borderRadius: '14px',
-    padding: '12px 12px 8px 16px',
+    background: 'rgba(11, 27, 34, 0.82)',
+    border: '1px solid rgba(116, 255, 205, 0.19)',
+    borderRadius: '22px',
+    padding: '16px 14px 10px 19px',
   },
   ta: {
     width: '100%', background: 'transparent',
