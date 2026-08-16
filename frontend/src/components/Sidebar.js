@@ -4,23 +4,28 @@ import DnaLogo from './DnaLogo';
 
 export default function Sidebar({ convos, activeId, onNew, onSelect }) {
   return (
-    <div style={S.wrap}>
+    <div className="app-sidebar" style={S.wrap}>
       <div style={S.top}>
         <div style={S.brand}>
           <DnaLogo size={28} />
-          <span style={S.brandName}>VaidyaAI</span>
+          <div>
+            <span style={S.brandName}>Vaidya<span className="brand-accent">AI</span></span>
+            <span className="brand-sub">CARE, REIMAGINED</span>
+          </div>
         </div>
-        <button style={S.newBtn} onClick={onNew} title="New consultation">
+        <button className="new-chat-button" style={S.newBtn} onClick={onNew} title="New consultation">
           <FiPlus size={16} color="var(--text-sub)" />
         </button>
       </div>
 
       <div style={S.list}>
+        <div className="sidebar-label">YOUR CONSULTATIONS</div>
         {convos.length === 0 && (
           <div style={S.empty}>No consultations yet</div>
         )}
         {convos.map(c => (
           <button
+            className="conversation-item"
             key={c.id}
             style={{
               ...S.item,
@@ -35,6 +40,7 @@ export default function Sidebar({ convos, activeId, onNew, onSelect }) {
       </div>
 
       <div style={S.bottom}>
+        <div className="privacy-note"><span>●</span> Your conversation stays private</div>
         <a href="/doctor" style={S.bottomLink}>
           <FiActivity size={14} />
           <span>Doctor Dashboard</span>
@@ -46,21 +52,21 @@ export default function Sidebar({ convos, activeId, onNew, onSelect }) {
 
 const S = {
   wrap: {
-    width: '220px', flexShrink: 0,
-    background: 'var(--sidebar)',
+    width: '248px', flexShrink: 0,
+    background: 'rgba(5, 14, 18, 0.88)',
     display: 'flex', flexDirection: 'column',
-    height: '100vh', padding: '12px 8px',
-    borderRight: '1px solid var(--border)',
+    height: '100vh', padding: '18px 12px 14px',
+    borderRight: '1px solid rgba(112, 255, 203, 0.12)',
   },
   top: {
     display: 'flex', alignItems: 'center',
     justifyContent: 'space-between',
-    padding: '4px 8px 16px',
+    padding: '4px 7px 26px',
   },
   brand: { display: 'flex', alignItems: 'center', gap: '8px' },
-  brandName: { fontSize: '15px', fontWeight: '600', color: 'var(--text)' },
+  brandName: { display: 'block', fontSize: '17px', fontWeight: '750', color: 'var(--text)', letterSpacing: '-0.03em' },
   newBtn: {
-    width: '28px', height: '28px', borderRadius: '6px',
+    width: '34px', height: '34px', borderRadius: '10px',
     display: 'flex', alignItems: 'center', justifyContent: 'center',
   },
   list: { flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '2px' },
@@ -69,7 +75,7 @@ const S = {
     display: 'flex', alignItems: 'center', gap: '8px',
     padding: '8px 10px', borderRadius: '8px',
     width: '100%', cursor: 'pointer',
-    border: 'none', transition: 'background 0.15s',
+    border: '1px solid transparent', transition: 'all 0.2s ease',
   },
   itemTitle: {
     fontSize: '13px', color: 'var(--text-sub)',
@@ -85,4 +91,4 @@ const S = {
     padding: '8px 10px', borderRadius: '8px',
     fontSize: '13px', color: 'var(--text-sub)',
   },
-};  
+};

@@ -1,5 +1,9 @@
+import asyncio
+import logging
+
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException
 from fastapi.responses import Response
+from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from datetime import datetime
@@ -11,6 +15,8 @@ from app.models.database import get_db
 from app.models.session_model import TriageSession, Message
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
+CHAT_TIMEOUT_SECONDS = 60
 
 # Ordered most severe first, so a session's stored risk only ever escalates.
 RISK_ORDER = ["low", "medium", "high", "emergency"]
@@ -73,7 +79,24 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db)):
         for m in sorted(session.messages, key=lambda m: m.id)
     ]
 
-    result = run_triage_agent(request.message, history)
+    # The Groq/LangChain client is synchronous. Keep it off the event loop so a
+    # slow model call cannot freeze health checks and every other API request.
+    try:
+        result = await asyncio.wait_for(
+            run_in_threadpool(run_triage_agent, request.message, history),
+            timeout=CHAT_TIMEOUT_SECONDS,
+        )
+    except asyncio.TimeoutError as exc:
+        raise HTTPException(
+            status_code=504,
+            detail="The AI provider took too long to respond. Please try again.",
+        ) from exc
+    except Exception as exc:
+        logger.exception("Triage model request failed")
+        raise HTTPException(
+            status_code=503,
+            detail="The AI provider is temporarily unavailable. Please try again.",
+        ) from exc
 
     db.add(Message(session_id=session.id, role="user", content=request.message))
     db.add(Message(session_id=session.id, role="assistant", content=result["response"]))
