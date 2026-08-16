@@ -30,7 +30,7 @@ export default function PatientPage({ sessionId, isHome, onFirstMessage, onUpdat
 
   const recorderRef = useRef(null);
   const chunksRef = useRef([]);
-  const bottomRef = useRef(null);
+  const chatRef = useRef(null);
   const timerRef = useRef(null);
   const titleSet = useRef(false);
   const fileRef = useRef(null);
@@ -46,7 +46,19 @@ export default function PatientPage({ sessionId, isHome, onFirstMessage, onUpdat
   }, []);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const chat = chatRef.current;
+    if (!chat) return undefined;
+
+    // Scroll only the message pane. scrollIntoView can also move the document
+    // viewport, which pushed the top bar and newest reply above the screen.
+    const frame = requestAnimationFrame(() => {
+      if (typeof chat.scrollTo === 'function') {
+        chat.scrollTo({ top: chat.scrollHeight, behavior: 'smooth' });
+      } else {
+        chat.scrollTop = chat.scrollHeight;
+      }
+    });
+    return () => cancelAnimationFrame(frame);
   }, [messages, isLoading]);
 
   useEffect(() => {
@@ -283,7 +295,7 @@ export default function PatientPage({ sessionId, isHome, onFirstMessage, onUpdat
 
       {/* Chat messages */}
       {!showHome && (
-        <div className="chat-stream" style={S.chat}>
+        <div ref={chatRef} className="chat-stream" style={S.chat}>
           {messages.map((msg, i) => {
             const risk = msg.role === 'assistant' ? getRisk(msg.content) : null;
 
@@ -379,7 +391,6 @@ export default function PatientPage({ sessionId, isHome, onFirstMessage, onUpdat
               </div>
             </div>
           )}
-          <div ref={bottomRef} />
         </div>
       )}
 
@@ -531,7 +542,7 @@ const S = {
     fontSize: '13px', color: 'var(--text-sub)', cursor: 'pointer',
   },
   chat: {
-    flex: 1, overflowY: 'auto',
+    flex: 1, minHeight: 0, overflowY: 'auto',
     padding: '32px 24px 8px',
     display: 'flex', flexDirection: 'column', gap: '24px',
   },
