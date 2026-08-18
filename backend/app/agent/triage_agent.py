@@ -2,6 +2,7 @@ from langchain_groq import ChatGroq
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from app.utils.config import GROQ_API_KEY, GROQ_MODEL, GROQ_FALLBACK_MODEL
 from app.rag.medical_rag import retrieve_medical_context
+from app.agent.triage_rules import build_fallback_response, evaluate_triage
 import logging
 import re
 
@@ -21,46 +22,13 @@ fallback_llm = ChatGroq(
 
 
 def assess_risk(symptoms: str) -> str:
-    """
-    Deterministic keyword triage. Returns a normalised level —
-    "emergency" | "high" | "medium" | "low" — matching the doctor dashboard.
-    """
-    emergency_keywords = ["chest pain", "difficulty breathing", "unconscious",
-                         "stroke", "heart attack", "seizure", "severe bleeding",
-                         "neck stiffness", "non-fading rash", "worst headache",
-                         "sudden severe headache", "new weakness"]
-    high_keywords = ["high fever", "vomiting blood", "severe pain",
-                    "difficulty swallowing", "confusion"]
-    medium_keywords = ["fever", "vomiting", "dizziness", "moderate pain",
-                      "persistent cough"]
-
-    symptoms_lower = symptoms.lower()
-
-    if any(kw in symptoms_lower for kw in emergency_keywords):
-        return "emergency"
-    elif any(kw in symptoms_lower for kw in high_keywords):
-        return "high"
-    elif any(kw in symptoms_lower for kw in medium_keywords):
-        return "medium"
-    else:
-        return "low"
+    """Compatibility wrapper around the shared triage framework."""
+    return evaluate_triage(symptoms).risk_level or "low"
 
 
 def recommend_specialist(symptoms: str) -> str:
-    symptoms_lower = symptoms.lower()
-
-    if any(kw in symptoms_lower for kw in ["chest", "heart", "palpitation"]):
-        return "Cardiologist (heart specialist)"
-    elif any(kw in symptoms_lower for kw in ["breathe", "lung", "cough", "asthma"]):
-        return "Pulmonologist (lung specialist)"
-    elif any(kw in symptoms_lower for kw in ["stomach", "vomit", "diarrhea", "abdomen"]):
-        return "Gastroenterologist (digestive specialist)"
-    elif any(kw in symptoms_lower for kw in ["seizure", "new weakness", "memory loss"]):
-        return "Neurologist (brain and nerve specialist)"
-    elif any(kw in symptoms_lower for kw in ["skin", "rash", "itch"]):
-        return "Dermatologist (skin specialist)"
-    else:
-        return "General Physician for initial evaluation"
+    """Compatibility wrapper returning a conservative first point of care."""
+    return evaluate_triage(symptoms).specialist
 
 
 SYSTEM_PROMPT = """You are VaidyaAI, a knowledgeable and empathetic AI medical triage assistant.
@@ -97,8 +65,10 @@ Rules:
 - Use simple words — no complex medical jargon
 - Respond in the same language the patient uses (Hindi, Kannada, or English)
 - Treat risk as provisional when essential red-flag information is missing
-- For headache with fever, ask one concise safety question covering neck stiffness, confusion, weakness, seizure, repeated vomiting, light sensitivity, and a non-fading rash
+- Screen respiratory, cardiac, neurological, digestive, urinary, skin/allergy, eye, injury, pregnancy, mental-health, infection, and general red flags
+- Ask exactly one concise safety question relevant to the main symptom category
 - Recommend a General Physician or urgent-care clinician first unless symptoms clearly point to a specialist
+- Never let a possible diagnosis override explicit emergency warning signs
 - If emergency symptoms detected, flag immediately at the top"""
 
 
@@ -137,69 +107,9 @@ def build_safe_fallback(
     risk_level: str | None,
     specialist: str | None,
 ) -> str:
-    """Provide conservative guidance when hosted AI services are unavailable."""
-    labels = {
-        "low": "🟢 Low",
-        "medium": "🟡 Medium",
-        "high": "🔴 High",
-        "emergency": "🚨 Emergency",
-    }
-
-    if risk_level == "emergency":
-        action = (
-            "Call your local emergency number or go to the nearest emergency "
-            "department now. Do not drive yourself if you feel faint or very unwell."
-        )
-    elif risk_level == "high":
-        action = (
-            "Please arrange urgent medical assessment today. If symptoms worsen, "
-            "seek emergency care immediately."
-        )
-    elif risk_level == "medium":
-        action = (
-            "Rest, stay hydrated if you can, and arrange a medical consultation "
-            "soon—especially if symptoms persist or worsen."
-        )
-    else:
-        action = (
-            "Monitor your symptoms, rest, and stay hydrated. Consult a clinician "
-            "if the problem persists, worsens, or worries you."
-        )
-
-    symptoms_lower = user_message.lower()
-    headache_with_fever = "headache" in symptoms_lower and "fever" in symptoms_lower
-    safety_question = ""
-    if headache_with_fever:
-        risk_text = f"{labels.get(risk_level, 'Not yet assessed')} — provisional"
-        specialist = "General Physician or urgent-care clinician for initial evaluation"
-        action = (
-            "Please arrange same-day medical advice. Rest, drink fluids if you "
-            "can, monitor your temperature, and seek urgent help if symptoms worsen."
-        )
-        safety_question = """
-
-**Important Safety Check**
-Do you have neck stiffness, confusion, new weakness, a seizure, repeated vomiting, severe light sensitivity, or a rash that does not fade when pressed?
-
-If yes to any of these—or if this is the worst or most sudden headache you have had—seek emergency care now."""
-    else:
-        risk_text = labels.get(risk_level, "Not yet assessed")
-    specialist_text = specialist or "General Physician for initial evaluation"
-
-    return f"""**Assessment**
-I can provide basic safety guidance, but the detailed AI assessment is temporarily limited.
-
-**Risk Level:** {risk_text}
-{safety_question}
-
-**What You Should Do**
-{action}
-
-**Recommended Specialist**
-{specialist_text}
-
----
-*This is not a diagnosis. Always consult a qualified doctor.*"""
+    """Compatibility wrapper for the provider-independent response builder."""
+    triage = evaluate_triage(user_message)
+    return build_fallback_response(user_message, triage)
 
 
 def run_triage_agent(user_message: str, chat_history: list = None) -> dict:
@@ -217,11 +127,9 @@ def run_triage_agent(user_message: str, chat_history: list = None) -> dict:
 
     chat_history = chat_history or []
 
-    symptom_keywords = ["pain", "fever", "cough", "vomit", "headache",
-                       "breath", "dizzy", "rash", "bleed", "chest"]
-    mentions_symptoms = any(kw in user_message.lower() for kw in symptom_keywords)
-    risk_level = assess_risk(user_message) if mentions_symptoms else None
-    specialist = recommend_specialist(user_message) if mentions_symptoms else None
+    triage = evaluate_triage(user_message)
+    risk_level = triage.risk_level
+    specialist = triage.specialist if risk_level else None
 
     try:
         medical_context = retrieve_medical_context(user_message)
@@ -234,7 +142,14 @@ def run_triage_agent(user_message: str, chat_history: list = None) -> dict:
 Use the following medical knowledge to inform your response:
 ---MEDICAL CONTEXT---
 {medical_context}
----END CONTEXT---"""
+---END CONTEXT---
+
+Deterministic safety screen (do not downgrade this urgency):
+- Category: {triage.category}
+- Provisional risk: {risk_level or 'not assessed'}
+- Explicit red flags: {', '.join(triage.matched_red_flags) or 'none stated'}
+- Ask this safety question if details are missing: {triage.question}
+- First point of care: {triage.specialist}"""
 
     messages = [SystemMessage(content=system_prompt)]
 
@@ -256,7 +171,7 @@ Use the following medical knowledge to inform your response:
             ai_response = response.content
         except Exception:
             logger.exception("Fallback Groq model failed; using safe local guidance")
-            ai_response = build_safe_fallback(user_message, risk_level, specialist)
+            ai_response = build_fallback_response(user_message, triage)
 
     # The model already states a risk level inside its structured reply, so the
     # keyword check is used only as a safety net: it prepends a banner when it
