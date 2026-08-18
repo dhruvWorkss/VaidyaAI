@@ -141,6 +141,7 @@ Runs at `http://localhost:3000` and talks to `localhost:8000` by default.
 |---|---|---|
 | `GROQ_API_KEY` | **yes** | — |
 | `GROQ_MODEL` | no | `llama-3.3-70b-versatile` |
+| `GROQ_FALLBACK_MODEL` | no | `llama-3.1-8b-instant` |
 | `WHISPER_MODEL` | no | `whisper-large-v3` |
 | `DATABASE_URL` | no | local SQLite file |
 | `ALLOWED_ORIGINS` | no | `localhost:3000,localhost:5173` |
