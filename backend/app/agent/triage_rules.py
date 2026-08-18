@@ -185,6 +185,54 @@ def evaluate_triage(message: str) -> TriageResult:
     )
 
 
+DETAIL_PATTERNS = {
+    "duration": re.compile(
+        r"\b(today|yesterday|since|for (?:about )?\d+|\d+\s*(?:minutes?|hours?|days?|weeks?))\b"
+    ),
+    "severity": re.compile(r"\b(mild|moderate|severe|worst|\d{1,2}\s*/\s*10)\b"),
+    "measurement": re.compile(r"\b\d{2,3}(?:\.\d+)?\s*(?:°\s*)?[fc]\b"),
+    "associated": re.compile(
+        r"\b(with|also|along with|but no|without|denies|vomit|rash|stiff|weak|breath)\b"
+    ),
+}
+
+
+def has_enough_initial_detail(message: str) -> bool:
+    """True when an initial message already supplies multiple useful details."""
+    text = message.lower()
+    return sum(bool(pattern.search(text)) for pattern in DETAIL_PATTERNS.values()) >= 2
+
+
+def should_ask_follow_up(
+    message: str,
+    triage: TriageResult,
+    prior_user_messages: list[str] | None = None,
+) -> bool:
+    """Collect one focused history round unless urgency or detail makes it unnecessary."""
+    prior_user_messages = prior_user_messages or []
+    if triage.risk_level in (None, "emergency"):
+        return False
+    if prior_user_messages:
+        return False
+    return not has_enough_initial_detail(message)
+
+
+def build_intake_response(message: str, triage: TriageResult) -> str:
+    temperature = (
+        " What is your measured temperature?"
+        if any(term in message.lower() for term in ("fever", "temperature", "chills"))
+        else ""
+    )
+    return f"""**Before I assess this**
+I need a little more context so I do not give you a premature risk level.
+
+When did it start, how severe is it, and is it getting better or worse?{temperature}
+
+**Safety check:** {triage.question}
+
+Please answer in one message. I’ll then summarize the situation, suggest next steps, and show the risk level at the end."""
+
+
 def build_fallback_response(message: str, triage: TriageResult) -> str:
     labels = {
         "low": "🟢 Low",
@@ -202,18 +250,19 @@ def build_fallback_response(message: str, triage: TriageResult) -> str:
             + ", ".join(triage.matched_red_flags)
         )
     else:
-        safety_section = f"\n\n**One Important Safety Question**\n{triage.question}"
+        safety_section = ""
 
     return f"""**Assessment**
 Based on the information provided, this is a safety-focused provisional triage assessment. More details are needed to understand the cause.
-
-**Risk Level:** {risk_text}{safety_section}
+{safety_section}
 
 **What You Should Do**
 {triage.action}
 
 **Who to Contact**
 {triage.specialist}
+
+**Risk Level:** {risk_text}
 
 ---
 *This is not a diagnosis. If you feel seriously unwell or unsafe, seek urgent in-person care.*"""

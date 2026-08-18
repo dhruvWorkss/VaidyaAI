@@ -1,6 +1,11 @@
 import unittest
 
-from app.agent.triage_rules import build_fallback_response, evaluate_triage
+from app.agent.triage_rules import (
+    build_fallback_response,
+    build_intake_response,
+    evaluate_triage,
+    should_ask_follow_up,
+)
 
 
 class TriageRulesTests(unittest.TestCase):
@@ -45,8 +50,30 @@ class TriageRulesTests(unittest.TestCase):
         result = evaluate_triage("persistent cough")
         response = build_fallback_response("persistent cough", result)
         self.assertIn("provisional", response)
-        self.assertIn("One Important Safety Question", response)
         self.assertIn("not a diagnosis", response)
+
+    def test_initial_vague_symptoms_trigger_intake_before_risk(self):
+        message = "I have a headache and fever"
+        triage = evaluate_triage(message)
+        self.assertTrue(should_ask_follow_up(message, triage, []))
+        response = build_intake_response(message, triage)
+        self.assertIn("measured temperature", response)
+        self.assertIn("When did it start", response)
+        self.assertNotIn("Risk Level:", response)
+
+    def test_detailed_initial_message_does_not_over_question(self):
+        message = "Mild headache for 2 days with no vomiting or neck stiffness"
+        triage = evaluate_triage(message)
+        self.assertFalse(should_ask_follow_up(message, triage, []))
+
+    def test_follow_up_answer_allows_assessment(self):
+        triage = evaluate_triage("headache and fever 101 F for 2 days, moderate")
+        self.assertFalse(should_ask_follow_up("101 F for 2 days, moderate", triage, ["headache and fever"]))
+
+    def test_risk_level_is_at_end_of_fallback_assessment(self):
+        triage = evaluate_triage("persistent cough for 4 days, moderate")
+        response = build_fallback_response("persistent cough for 4 days, moderate", triage)
+        self.assertGreater(response.index("**Risk Level:**"), response.index("**Who to Contact**"))
 
 
 if __name__ == "__main__":
