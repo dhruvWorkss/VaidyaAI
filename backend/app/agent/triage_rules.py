@@ -28,7 +28,7 @@ CATEGORY_TERMS = {
     "neurological": ("headache", "migraine", "seizure", "weakness", "numb", "dizzy", "confusion"),
     "digestive": ("stomach", "abdomen", "abdominal", "vomit", "diarrhea", "constipation", "nausea"),
     "urinary": ("urine", "urinating", "pee", "kidney", "flank", "burning urination"),
-    "skin_allergy": ("rash", "itch", "hives", "skin", "swelling"),
+    "skin_allergy": ("rash", "itch", "hives", "skin", "swelling", "swollen"),
     "eye": ("eye", "vision", "sight"),
     "injury": ("injury", "fell", "fall", "sprain", "fracture", "cut", "burn"),
     "infection": ("fever", "temperature", "chills", "infection"),
@@ -43,10 +43,10 @@ EMERGENCY_FLAGS = {
     "stroke-like symptoms": ("face droop", "one sided weakness", "one-sided weakness", "slurred speech"),
     "seizure": ("seizure", "convulsion"),
     "sudden severe headache": ("worst headache", "sudden severe headache", "thunderclap headache"),
-    "meningitis warning signs": ("neck stiffness", "non-fading rash", "rash does not fade"),
+    "meningitis warning signs": ("non-fading rash", "rash does not fade"),
     "severe bleeding": ("severe bleeding", "bleeding won't stop", "bleeding will not stop"),
     "internal bleeding": ("vomiting blood", "coughing blood", "black tarry stool"),
-    "severe allergic reaction": ("swollen tongue", "tongue swelling", "tongue is swelling", "swollen lips", "lips are swelling", "throat closing", "anaphylaxis"),
+    "severe allergic reaction": ("swollen tongue", "tongue swelling", "tongue is swelling", "throat closing", "anaphylaxis"),
     "immediate self-harm risk": ("kill myself", "end my life", "suicide plan", "suicidal", "took an overdose", "overdose now"),
     "pregnancy emergency": ("pregnant and heavy bleeding", "pregnant with severe pain", "no fetal movement"),
     "sudden vision loss": ("sudden vision loss", "suddenly can't see", "suddenly cannot see"),
@@ -57,6 +57,7 @@ HIGH_URGENCY_TERMS = (
     "chest pain", "chest pressure", "high fever", "severe pain", "persistent vomiting", "can't keep fluids down",
     "cannot keep fluids down", "blood in stool", "blood in urine", "confusion",
     "difficulty swallowing", "rapidly spreading rash", "dehydrated", "very drowsy",
+    "neck stiffness", "swollen lips", "lips are swollen", "lips are swelling",
 )
 
 MEDIUM_URGENCY_TERMS = (
@@ -150,6 +151,16 @@ def evaluate_triage(message: str) -> TriageResult:
         and "chest discomfort with concerning symptoms" not in red_flags
     ):
         red_flags.append("chest discomfort with concerning symptoms")
+
+    # Some individual symptoms are ambiguous. Escalate combinations that form
+    # a clearer emergency pattern, while allowing isolated mentions to receive
+    # the category-specific safety questions first.
+    has_neck_stiffness = _contains(text, "neck stiffness")
+    has_infection_sign = any(
+        _contains(text, phrase) for phrase in ("fever", "high temperature", "non-fading rash")
+    )
+    if has_neck_stiffness and has_infection_sign and "possible meningitis warning signs" not in red_flags:
+        red_flags.append("possible meningitis warning signs")
 
     red_flags = tuple(red_flags)
 

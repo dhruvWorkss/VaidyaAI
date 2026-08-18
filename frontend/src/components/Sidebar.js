@@ -1,8 +1,15 @@
 import React from 'react';
-import { FiPlus, FiMessageSquare, FiActivity } from 'react-icons/fi';
+import { FiPlus, FiMessageSquare, FiActivity, FiTrash2 } from 'react-icons/fi';
 import DnaLogo from './DnaLogo';
 
-export default function Sidebar({ convos, activeId, onNew, onSelect }) {
+export default function Sidebar({ convos, activeId, onNew, onSelect, onDelete }) {
+  const deleteConsultation = (event, convo) => {
+    event.stopPropagation();
+    if (window.confirm(`Delete “${convo.title}”? This cannot be undone.`)) {
+      onDelete(convo.id).catch(() => window.alert('Could not delete this consultation. Please try again.'));
+    }
+  };
+
   return (
     <div className="app-sidebar" style={S.wrap}>
       <div style={S.top}>
@@ -24,18 +31,28 @@ export default function Sidebar({ convos, activeId, onNew, onSelect }) {
           <div style={S.empty}>No consultations yet</div>
         )}
         {convos.map(c => (
-          <button
+          <div
             className="conversation-item"
             key={c.id}
             style={{
               ...S.item,
               background: c.id === activeId ? 'var(--surface)' : 'transparent',
             }}
-            onClick={() => onSelect(c.id)}
           >
-            <FiMessageSquare size={13} color="var(--text-muted)" />
-            <span style={S.itemTitle}>{c.title}</span>
-          </button>
+            <button style={S.selectItem} onClick={() => onSelect(c.id)} title={c.title}>
+              <FiMessageSquare size={13} color="var(--text-muted)" />
+              <span style={S.itemTitle}>{c.title}</span>
+            </button>
+            <button
+              className="delete-conversation-button"
+              style={S.deleteBtn}
+              onClick={event => deleteConsultation(event, c)}
+              title="Delete consultation"
+              aria-label={`Delete ${c.title}`}
+            >
+              <FiTrash2 size={13} />
+            </button>
+          </div>
         ))}
       </div>
 
@@ -77,10 +94,18 @@ const S = {
     width: '100%', cursor: 'pointer',
     border: '1px solid transparent', transition: 'all 0.2s ease',
   },
+  selectItem: {
+    display: 'flex', alignItems: 'center', gap: '8px',
+    minWidth: 0, flex: 1, padding: 0, background: 'transparent', cursor: 'pointer',
+  },
   itemTitle: {
     fontSize: '13px', color: 'var(--text-sub)',
     overflow: 'hidden', textOverflow: 'ellipsis',
     whiteSpace: 'nowrap', flex: 1, textAlign: 'left',
+  },
+  deleteBtn: {
+    flexShrink: 0, padding: '5px', borderRadius: '6px',
+    color: 'var(--text-muted)', background: 'transparent', cursor: 'pointer',
   },
   bottom: {
     borderTop: '1px solid var(--border)',

@@ -1,14 +1,22 @@
 import '@testing-library/jest-dom';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import PatientPage from './PatientPage';
-import { sendMessage, speakText } from '../services/api';
+import { getSession, sendMessage, speakText } from '../services/api';
+
+jest.mock('react-markdown', () => ({ children }) => children);
 
 jest.mock('../services/api', () => ({
   sendMessage: jest.fn(),
   speakText: jest.fn(),
   transcribeAudio: jest.fn(),
   analyzeReport: jest.fn(),
+  getSession: jest.fn(),
 }));
+
+beforeEach(() => {
+  window.scrollTo = jest.fn();
+  getSession.mockRejectedValue({ status: 404 });
+});
 
 test('the stop button aborts an active chat request and restores send', async () => {
   let requestSignal;
@@ -73,4 +81,27 @@ test('assistant replies are silent until Read aloud is pressed', async () => {
     'Please rest and drink water.', 'en', expect.anything()
   ));
   await waitFor(() => expect(play).toHaveBeenCalled());
+});
+
+test('a saved consultation loads its messages when selected', async () => {
+  getSession.mockResolvedValue({
+    language: 'en',
+    messages: [
+      { role: 'user', content: 'Previous symptom' },
+      { role: 'assistant', content: 'Previous guidance' },
+    ],
+  });
+
+  render(
+    <PatientPage
+      sessionId="saved-session"
+      isHome={false}
+      onFirstMessage={() => 'saved-session'}
+      onUpdateTitle={() => {}}
+    />
+  );
+
+  expect(await screen.findByText('Previous symptom')).toBeInTheDocument();
+  expect(screen.getByText('Previous guidance')).toBeInTheDocument();
+  expect(getSession).toHaveBeenCalledWith('saved-session');
 });

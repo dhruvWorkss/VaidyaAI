@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
-import { speakText, transcribeAudio, analyzeReport, sendMessage } from '../services/api';
+import { speakText, transcribeAudio, analyzeReport, getSession, sendMessage } from '../services/api';
 import { FiMic, FiSquare, FiSend, FiPaperclip, FiGlobe, FiVolume2 } from 'react-icons/fi';
 import ReactMarkdown from 'react-markdown';
 import DnaLogo from '../components/DnaLogo';
@@ -52,6 +52,33 @@ export default function PatientPage({ sessionId, isHome, onFirstMessage, onUpdat
     speechControllerRef.current?.abort();
     audioRef.current?.pause();
   }, []);
+
+  useEffect(() => {
+    if (sessionId === 'home') {
+      setMessages([]);
+      setActiveSession('home');
+      titleSet.current = false;
+      return undefined;
+    }
+
+    const controller = new AbortController();
+    setActiveSession(sessionId);
+    getSession(sessionId)
+      .then(session => {
+        if (controller.signal.aborted) return;
+        setMessages(session.messages || []);
+        if (session.language) setLanguage(session.language);
+        titleSet.current = Boolean(session.messages?.length);
+      })
+      .catch(err => {
+        // A newly-created consultation does not exist on the backend until its
+        // first message is sent. That is an expected empty chat, not an error.
+        if (!controller.signal.aborted && err.status !== 404) {
+          console.error('Could not load consultation:', err);
+        }
+      });
+    return () => controller.abort();
+  }, [sessionId]);
 
   useEffect(() => {
     const chat = chatRef.current;

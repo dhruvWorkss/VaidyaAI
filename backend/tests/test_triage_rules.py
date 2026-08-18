@@ -38,6 +38,23 @@ class TriageRulesTests(unittest.TestCase):
         self.assertIn("pain spreading", response)
         self.assertNotIn("Risk Level:", response)
 
+    def test_ambiguous_isolated_symptoms_get_screened_before_emergency(self):
+        for message in ("I have neck stiffness", "My lips are swollen"):
+            with self.subTest(message=message):
+                triage = evaluate_triage(message)
+                self.assertEqual(triage.risk_level, "high")
+                self.assertTrue(should_ask_follow_up(message, triage, []))
+
+    def test_concerning_symptom_combinations_still_escalate(self):
+        self.assertEqual(
+            evaluate_triage("I have fever and neck stiffness").risk_level,
+            "emergency",
+        )
+        self.assertEqual(
+            evaluate_triage("My lips are swollen and I cannot breathe").risk_level,
+            "emergency",
+        )
+
     def test_negated_red_flag_does_not_escalate(self):
         result = evaluate_triage("I have a cough but no chest pain and no difficulty breathing")
         self.assertNotEqual(result.risk_level, "emergency")

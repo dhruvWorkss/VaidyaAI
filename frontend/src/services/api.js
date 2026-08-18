@@ -59,7 +59,8 @@ export const speakText = async (text, language = 'en', signal) => {
 };
 
 export const clearSession = async (sessionId) => {
-  await fetch(`${BASE_URL}/triage/session/${sessionId}`, { method: 'DELETE' });
+  const response = await fetch(`${BASE_URL}/triage/session/${sessionId}`, { method: 'DELETE' });
+  return parseResponse(response);
 };
 
 export const analyzeReport = async (file, language = 'en') => {
