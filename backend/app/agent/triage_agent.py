@@ -2,7 +2,12 @@ from langchain_groq import ChatGroq
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from app.utils.config import GROQ_API_KEY, GROQ_MODEL, GROQ_FALLBACK_MODEL
 from app.rag.medical_rag import retrieve_medical_context
-from app.agent.triage_rules import build_fallback_response, evaluate_triage
+from app.agent.triage_rules import (
+    build_fallback_response,
+    build_intake_response,
+    evaluate_triage,
+    should_ask_follow_up,
+)
 import logging
 import re
 
@@ -48,20 +53,23 @@ Brief summary of what the symptoms suggest.
 - Condition 1 — simple explanation
 - Condition 2 — simple explanation
 
-**Risk Level:** 🟢 Low / 🟡 Medium / 🔴 High / 🚨 Emergency
-
 **What You Should Do**
 Clear next steps for the patient.
 
 **Recommended Specialist**
 Which type of doctor to see.
 
+**Risk Level:** 🟢 Low / 🟡 Medium / 🔴 High / 🚨 Emergency
+
 ---
 *This is not a diagnosis. Always consult a qualified doctor.*
 
 Rules:
-- Never ask more than ONE follow-up question
-- After 1 patient message with symptoms, give a full structured assessment
+- Ask one compact follow-up round before assessing when duration, severity, measurements, or associated symptoms are missing
+- Combine the original symptoms with the follow-up answer before assessing
+- After the user answers the intake question, complete the assessment without another routine follow-up round
+- Do not delay explicit emergency advice to ask questions
+- If the first message already contains enough detail, assess it without unnecessary questioning
 - Use simple words — no complex medical jargon
 - Respond in the same language the patient uses (Hindi, Kannada, or English)
 - Treat risk as provisional when essential red-flag information is missing
@@ -69,6 +77,7 @@ Rules:
 - Ask exactly one concise safety question relevant to the main symptom category
 - Recommend a General Physician or urgent-care clinician first unless symptoms clearly point to a specialist
 - Never let a possible diagnosis override explicit emergency warning signs
+- Always place Risk Level at the end of the assessment, immediately before the disclaimer
 - If emergency symptoms detected, flag immediately at the top"""
 
 
@@ -126,13 +135,25 @@ def run_triage_agent(user_message: str, chat_history: list = None) -> dict:
         }
 
     chat_history = chat_history or []
-
-    triage = evaluate_triage(user_message)
+    prior_user_messages = [
+        msg["content"]
+        for msg in chat_history
+        if msg["role"] == "user" and evaluate_triage(msg["content"]).risk_level
+    ]
+    combined_context = " ".join([*prior_user_messages[-2:], user_message])
+    triage = evaluate_triage(combined_context)
     risk_level = triage.risk_level
     specialist = triage.specialist if risk_level else None
 
+    if should_ask_follow_up(user_message, triage, prior_user_messages):
+        return {
+            "response": build_intake_response(user_message, triage),
+            "risk_level": None,
+            "specialist": None,
+        }
+
     try:
-        medical_context = retrieve_medical_context(user_message)
+        medical_context = retrieve_medical_context(combined_context)
     except Exception:
         logger.exception("Medical context retrieval failed; continuing without RAG")
         medical_context = "No specific medical context is currently available."
