@@ -11,7 +11,8 @@ from app.agent.triage_rules import (
 class TriageRulesTests(unittest.TestCase):
     def test_explicit_emergency_red_flags_escalate(self):
         cases = [
-            "I have chest pain",
+            "I have crushing chest pressure",
+            "I have chest pain with shortness of breath",
             "I can't breathe",
             "sudden severe headache",
             "my tongue is swelling",
@@ -22,6 +23,37 @@ class TriageRulesTests(unittest.TestCase):
         for message in cases:
             with self.subTest(message=message):
                 self.assertEqual(evaluate_triage(message).risk_level, "emergency")
+
+    def test_isolated_chest_pain_gets_questions_before_assessment(self):
+        message = "I have chest pain"
+        triage = evaluate_triage(message)
+
+        self.assertEqual(triage.category, "cardiac")
+        self.assertEqual(triage.risk_level, "high")
+        self.assertTrue(triage.provisional)
+        self.assertTrue(should_ask_follow_up(message, triage, []))
+
+        response = build_intake_response(message, triage)
+        self.assertIn("shortness of breath", response)
+        self.assertIn("pain spreading", response)
+        self.assertNotIn("Risk Level:", response)
+
+    def test_ambiguous_isolated_symptoms_get_screened_before_emergency(self):
+        for message in ("I have neck stiffness", "My lips are swollen"):
+            with self.subTest(message=message):
+                triage = evaluate_triage(message)
+                self.assertEqual(triage.risk_level, "high")
+                self.assertTrue(should_ask_follow_up(message, triage, []))
+
+    def test_concerning_symptom_combinations_still_escalate(self):
+        self.assertEqual(
+            evaluate_triage("I have fever and neck stiffness").risk_level,
+            "emergency",
+        )
+        self.assertEqual(
+            evaluate_triage("My lips are swollen and I cannot breathe").risk_level,
+            "emergency",
+        )
 
     def test_negated_red_flag_does_not_escalate(self):
         result = evaluate_triage("I have a cough but no chest pain and no difficulty breathing")

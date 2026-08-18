@@ -137,6 +137,10 @@ a { text-decoration: none; color: inherit; }
 .new-chat-button { background: rgba(52,232,158,.07) !important; border: 1px solid rgba(52,232,158,.12) !important; transition: .2s ease; }
 .new-chat-button:hover { color: var(--accent); background: rgba(52,232,158,.14) !important; transform: rotate(6deg); }
 .conversation-item:hover { background: rgba(69,239,183,.07) !important; border-color: rgba(69,239,183,.12) !important; }
+.delete-conversation-button { opacity: 0; transition: opacity .15s ease, color .15s ease, background .15s ease; }
+.conversation-item:hover .delete-conversation-button,
+.delete-conversation-button:focus-visible { opacity: 1; }
+.delete-conversation-button:hover { color: #fb7185 !important; background: rgba(251,113,133,.1) !important; }
 .privacy-note { color: #52716a; font-size: 9px; line-height: 1.4; padding: 4px 10px 12px; }
 .privacy-note span { color: var(--accent); margin-right: 5px; text-shadow: 0 0 8px var(--accent); }
 .app-sidebar { backdrop-filter: blur(28px); }
