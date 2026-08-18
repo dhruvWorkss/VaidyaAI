@@ -6,6 +6,7 @@ from app.agent.triage_rules import (
     build_fallback_response,
     build_intake_response,
     evaluate_triage,
+    missing_details,
     should_ask_follow_up,
 )
 import logging
@@ -36,7 +37,7 @@ def recommend_specialist(symptoms: str) -> str:
     return evaluate_triage(symptoms).specialist
 
 
-SYSTEM_PROMPT = """You are VaidyaAI, a knowledgeable and empathetic AI medical triage assistant.
+SYSTEM_PROMPT = """You are VaidyaAI, a careful, conversational medical guidance assistant.
 
 Conversation style:
 - For greetings, thanks, and casual conversation, reply naturally and warmly in 1-2 sentences
@@ -44,41 +45,43 @@ Conversation style:
 - Do not say that the user has failed to provide symptoms or is "reaching out for help"
 - Only use the structured medical format below after the user describes symptoms or asks a health question
 
-After hearing symptoms or a health concern, respond in this structured format:
+After enough essential information is available, respond in this format:
 
 **Assessment**
-Brief summary of what the symptoms suggest.
+Summarize what the person reported, what is reassuring or concerning, and the limits of a chat assessment. Do not use filler such as "based on the information provided."
 
-**Possible Conditions**
-- Condition 1 — simple explanation
-- Condition 2 — simple explanation
+**What It Could Be**
+- Give 2–4 plausible categories from common to important, each with a short reason tied to the reported details
+- Say "could" or "may"; never present a diagnosis as certain
 
-**What You Should Do**
-Clear next steps for the patient.
+**What To Do Now**
+Give practical next steps appropriate to the urgency. Avoid medication doses and avoid treatment that depends on an unconfirmed diagnosis.
 
-**Recommended Specialist**
-Which type of doctor to see.
+**Get Urgent Help Now If**
+List the specific warning signs relevant to this symptom. Do not merely say "if warning signs appear."
 
-**Risk Level:** 🟢 Low / 🟡 Medium / 🔴 High / 🚨 Emergency
+**Who To Contact**
+Recommend the most appropriate first point of care.
+
+**Risk Level:** 🟢 Low / 🟡 Medium / 🔴 High / 🚨 Emergency — add one short reason
 
 ---
 *This is not a diagnosis. Always consult a qualified doctor.*
 
 Rules:
-- Ask one compact follow-up round before assessing when duration, severity, measurements, or associated symptoms are missing
-- Combine the original symptoms with the follow-up answer before assessing
-- After the user answers the intake question, complete the assessment without another routine follow-up round
+- The application handles follow-up collection before calling you; do not ask another routine question in a completed assessment
+- Use all conversation history, not only the latest sentence
+- Directly acknowledge the latest detail in natural language
+- Distinguish common possibilities from dangerous possibilities without creating false reassurance or alarm
 - Do not delay explicit emergency advice to ask questions
-- If the first message already contains enough detail, assess it without unnecessary questioning
 - Use simple words — no complex medical jargon
 - Respond in the same language the patient uses (Hindi, Kannada, or English)
 - Treat risk as provisional when essential red-flag information is missing
-- Screen respiratory, cardiac, neurological, digestive, urinary, skin/allergy, eye, injury, pregnancy, mental-health, infection, and general red flags
-- Ask exactly one concise safety question relevant to the main symptom category
 - Recommend a General Physician or urgent-care clinician first unless symptoms clearly point to a specialist
 - Never let a possible diagnosis override explicit emergency warning signs
 - Always place Risk Level at the end of the assessment, immediately before the disclaimer
-- If emergency symptoms detected, flag immediately at the top"""
+- If emergency symptoms are detected, put immediate action at the top
+- Never claim that reflux, gas, anxiety, or muscle strain is the cause of chest pain; describe these only as possibilities when the pattern fits"""
 
 
 GREETING_REPLIES = {
@@ -135,19 +138,49 @@ def run_triage_agent(user_message: str, chat_history: list = None) -> dict:
         }
 
     chat_history = chat_history or []
+    conversation_start = 0
+    for index in range(len(chat_history) - 1, -1, -1):
+        msg = chat_history[index]
+        if msg["role"] == "assistant" and (
+            "**Assessment**" in msg["content"]
+            or "🚨 **EMERGENCY" in msg["content"]
+        ):
+            conversation_start = index + 1
+            break
+    recent_history = chat_history[conversation_start:]
     prior_user_messages = [
         msg["content"]
-        for msg in chat_history
-        if msg["role"] == "user" and evaluate_triage(msg["content"]).risk_level
+        for msg in recent_history
+        if msg["role"] == "user" and greeting_reply(msg["content"]) is None
     ]
-    combined_context = " ".join([*prior_user_messages[-2:], user_message])
+    combined_context = " ".join([*prior_user_messages[-6:], user_message])
     triage = evaluate_triage(combined_context)
     risk_level = triage.risk_level
     specialist = triage.specialist if risk_level else None
 
-    if should_ask_follow_up(user_message, triage, prior_user_messages):
+    intake_rounds = sum(
+        1
+        for msg in recent_history
+        if msg["role"] == "assistant"
+        and (
+            "**A few important questions**" in msg["content"]
+            or "**One last clarification**" in msg["content"]
+        )
+    )
+    missing = missing_details(combined_context, triage.category)
+    if should_ask_follow_up(
+        user_message,
+        triage,
+        prior_user_messages,
+        intake_rounds=intake_rounds,
+    ):
         return {
-            "response": build_intake_response(user_message, triage),
+            "response": build_intake_response(
+                combined_context,
+                triage,
+                missing=missing,
+                round_number=intake_rounds + 1,
+            ),
             "risk_level": None,
             "specialist": None,
         }
@@ -169,7 +202,7 @@ Deterministic safety screen (do not downgrade this urgency):
 - Category: {triage.category}
 - Provisional risk: {risk_level or 'not assessed'}
 - Explicit red flags: {', '.join(triage.matched_red_flags) or 'none stated'}
-- Ask this safety question if details are missing: {triage.question}
+- Essential details still unstated: {', '.join(missing) or 'none'}
 - First point of care: {triage.specialist}"""
 
     messages = [SystemMessage(content=system_prompt)]
