@@ -26,7 +26,9 @@ def assess_risk(symptoms: str) -> str:
     "emergency" | "high" | "medium" | "low" — matching the doctor dashboard.
     """
     emergency_keywords = ["chest pain", "difficulty breathing", "unconscious",
-                         "stroke", "heart attack", "seizure", "severe bleeding"]
+                         "stroke", "heart attack", "seizure", "severe bleeding",
+                         "neck stiffness", "non-fading rash", "worst headache",
+                         "sudden severe headache", "new weakness"]
     high_keywords = ["high fever", "vomiting blood", "severe pain",
                     "difficulty swallowing", "confusion"]
     medium_keywords = ["fever", "vomiting", "dizziness", "moderate pain",
@@ -53,7 +55,7 @@ def recommend_specialist(symptoms: str) -> str:
         return "Pulmonologist (lung specialist)"
     elif any(kw in symptoms_lower for kw in ["stomach", "vomit", "diarrhea", "abdomen"]):
         return "Gastroenterologist (digestive specialist)"
-    elif any(kw in symptoms_lower for kw in ["headache", "seizure", "memory", "dizzy"]):
+    elif any(kw in symptoms_lower for kw in ["seizure", "new weakness", "memory loss"]):
         return "Neurologist (brain and nerve specialist)"
     elif any(kw in symptoms_lower for kw in ["skin", "rash", "itch"]):
         return "Dermatologist (skin specialist)"
@@ -94,6 +96,9 @@ Rules:
 - After 1 patient message with symptoms, give a full structured assessment
 - Use simple words — no complex medical jargon
 - Respond in the same language the patient uses (Hindi, Kannada, or English)
+- Treat risk as provisional when essential red-flag information is missing
+- For headache with fever, ask one concise safety question covering neck stiffness, confusion, weakness, seizure, repeated vomiting, light sensitivity, and a non-fading rash
+- Recommend a General Physician or urgent-care clinician first unless symptoms clearly point to a specialist
 - If emergency symptoms detected, flag immediately at the top"""
 
 
@@ -127,7 +132,11 @@ def greeting_reply(message: str) -> str | None:
     return None
 
 
-def build_safe_fallback(risk_level: str | None, specialist: str | None) -> str:
+def build_safe_fallback(
+    user_message: str,
+    risk_level: str | None,
+    specialist: str | None,
+) -> str:
     """Provide conservative guidance when hosted AI services are unavailable."""
     labels = {
         "low": "🟢 Low",
@@ -157,13 +166,31 @@ def build_safe_fallback(risk_level: str | None, specialist: str | None) -> str:
             "if the problem persists, worsens, or worries you."
         )
 
-    risk_text = labels.get(risk_level, "Not yet assessed")
+    symptoms_lower = user_message.lower()
+    headache_with_fever = "headache" in symptoms_lower and "fever" in symptoms_lower
+    safety_question = ""
+    if headache_with_fever:
+        risk_text = f"{labels.get(risk_level, 'Not yet assessed')} — provisional"
+        specialist = "General Physician or urgent-care clinician for initial evaluation"
+        action = (
+            "Please arrange same-day medical advice. Rest, drink fluids if you "
+            "can, monitor your temperature, and seek urgent help if symptoms worsen."
+        )
+        safety_question = """
+
+**Important Safety Check**
+Do you have neck stiffness, confusion, new weakness, a seizure, repeated vomiting, severe light sensitivity, or a rash that does not fade when pressed?
+
+If yes to any of these—or if this is the worst or most sudden headache you have had—seek emergency care now."""
+    else:
+        risk_text = labels.get(risk_level, "Not yet assessed")
     specialist_text = specialist or "General Physician for initial evaluation"
 
     return f"""**Assessment**
 I can provide basic safety guidance, but the detailed AI assessment is temporarily limited.
 
 **Risk Level:** {risk_text}
+{safety_question}
 
 **What You Should Do**
 {action}
@@ -229,7 +256,7 @@ Use the following medical knowledge to inform your response:
             ai_response = response.content
         except Exception:
             logger.exception("Fallback Groq model failed; using safe local guidance")
-            ai_response = build_safe_fallback(risk_level, specialist)
+            ai_response = build_safe_fallback(user_message, risk_level, specialist)
 
     # The model already states a risk level inside its structured reply, so the
     # keyword check is used only as a safety net: it prepends a banner when it
