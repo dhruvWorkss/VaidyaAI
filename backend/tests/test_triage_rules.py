@@ -4,6 +4,7 @@ from app.agent.triage_rules import (
     build_fallback_response,
     build_intake_response,
     evaluate_triage,
+    missing_details,
     should_ask_follow_up,
 )
 
@@ -99,13 +100,48 @@ class TriageRulesTests(unittest.TestCase):
         self.assertFalse(should_ask_follow_up(message, triage, []))
 
     def test_follow_up_answer_allows_assessment(self):
-        triage = evaluate_triage("headache and fever 101 F for 2 days, moderate")
-        self.assertFalse(should_ask_follow_up("101 F for 2 days, moderate", triage, ["headache and fever"]))
+        context = "headache and fever 101 F for 2 days, moderate, improving, no neck stiffness or confusion"
+        triage = evaluate_triage(context)
+        self.assertFalse(should_ask_follow_up(
+            "101 F for 2 days, moderate, improving, no neck stiffness or confusion",
+            triage,
+            ["headache and fever"],
+            intake_rounds=1,
+        ))
+
+    def test_incomplete_first_answer_gets_one_adaptive_clarification(self):
+        context = "I have chest pain it feels like a pin poking me from inside"
+        triage = evaluate_triage(context)
+        missing = missing_details(context, triage.category)
+
+        self.assertIn("duration", missing)
+        self.assertIn("severity", missing)
+        self.assertTrue(should_ask_follow_up(
+            "it feels like a pin poking me from inside",
+            triage,
+            ["I have chest pain"],
+            intake_rounds=1,
+        ))
+        response = build_intake_response(context, triage, missing, round_number=2)
+        self.assertIn("One last clarification", response)
+        self.assertNotIn("Risk Level:", response)
+
+    def test_intake_never_exceeds_two_rounds(self):
+        context = "I have chest pain it feels odd"
+        triage = evaluate_triage(context)
+        self.assertFalse(should_ask_follow_up(
+            "it feels odd",
+            triage,
+            ["I have chest pain"],
+            intake_rounds=2,
+        ))
 
     def test_risk_level_is_at_end_of_fallback_assessment(self):
         triage = evaluate_triage("persistent cough for 4 days, moderate")
         response = build_fallback_response("persistent cough for 4 days, moderate", triage)
-        self.assertGreater(response.index("**Risk Level:**"), response.index("**Who to Contact**"))
+        self.assertIn("**What It Could Be**", response)
+        self.assertIn("**Get Urgent Help Now If**", response)
+        self.assertGreater(response.index("**Risk Level:**"), response.index("**Who To Contact**"))
 
 
 if __name__ == "__main__":

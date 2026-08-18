@@ -97,6 +97,42 @@ SPECIALISTS = {
     "injury": "General Physician or urgent-care clinician for initial evaluation",
 }
 
+POSSIBLE_CATEGORIES = {
+    "cardiac": (
+        "Chest-wall or muscle irritation — more likely when movement or pressing the area changes the pain",
+        "Indigestion or reflux — may cause burning discomfort related to meals or lying down",
+        "Heart or lung causes — important to rule out when pain is persistent, exertional, pressure-like, or occurs with other warning signs",
+    ),
+    "respiratory": (
+        "A viral respiratory illness",
+        "Airway irritation or asthma",
+        "A lung infection or another cause that needs examination if breathing is affected",
+    ),
+    "neurological": (
+        "A common headache pattern such as tension headache or migraine",
+        "Dehydration, poor sleep, infection, or medication effects",
+        "A neurological cause that needs urgent assessment if warning signs are present",
+    ),
+    "digestive": (
+        "Indigestion, reflux, constipation, or a short-lived stomach illness",
+        "Inflammation or infection in the digestive system",
+        "Another abdominal condition that may require examination if pain is severe or localised",
+    ),
+    "general": (
+        "A common temporary illness or irritation",
+        "An infection, inflammation, or medication-related effect",
+        "Another cause that may need an examination if it persists or worsens",
+    ),
+}
+
+URGENT_WARNING_SIGNS = {
+    "cardiac": "Call emergency services for persistent or crushing pressure, trouble breathing, fainting, cold sweating, severe dizziness, or pain spreading to the arm, jaw, back, or stomach.",
+    "respiratory": "Seek emergency help for severe breathlessness, inability to speak full sentences, blue or grey lips, confusion, fainting, or rapidly worsening symptoms.",
+    "neurological": "Seek emergency help for a sudden worst-ever headache, seizure, fainting, confusion, new weakness or numbness, trouble speaking, or fever with neck stiffness.",
+    "digestive": "Seek urgent help for severe or localised pain, a rigid or swollen abdomen, fainting, vomiting blood, black stool, or inability to keep fluids down.",
+    "general": "Seek urgent help for breathing difficulty, fainting, confusion, severe or rapidly worsening pain, heavy bleeding, or feeling dangerously unwell.",
+}
+
 
 NEGATION_RE = re.compile(r"\b(no|not|without|denies|never|dont|don't|do not)\b")
 
@@ -218,50 +254,118 @@ def evaluate_triage(message: str) -> TriageResult:
 
 DETAIL_PATTERNS = {
     "duration": re.compile(
-        r"\b(today|yesterday|since|for (?:about )?\d+|\d+\s*(?:minutes?|hours?|days?|weeks?))\b"
+        r"\b(today|yesterday|since|for (?:about )?\d+|\d+\s*(?:minutes?|hours?|days?|weeks?)|"
+        r"(?:a|an|one)\s+(?:minute|hour|day|week)(?:\s+ago)?)\b"
     ),
     "severity": re.compile(r"\b(mild|moderate|severe|worst|\d{1,2}\s*/\s*10)\b"),
     "measurement": re.compile(r"\b\d{2,3}(?:\.\d+)?\s*(?:°\s*)?[fc]\b"),
     "associated": re.compile(
         r"\b(with|also|along with|but no|without|denies|vomit|rash|stiff|weak|breath)\b"
     ),
+    "course": re.compile(r"\b(better|worse|worsening|improving|same|comes? and goes?|constant)\b"),
 }
+
+SAFETY_ANSWER_RE = re.compile(
+    r"\b(no|none|without|denies|breath|sweat|faint|dizz|weak|numb|blood|rash|spread|radiat)\b"
+)
+
+CATEGORY_DETAIL_RE = {
+    "cardiac": re.compile(
+        r"\b(sharp|stabbing|pin|pressure|squeez|burning|ache|movement|press|touch|"
+        r"breath|eat|meal|exert|walk|exercise|rest|spread|radiat)\b"
+    ),
+    "respiratory": re.compile(r"\b(rest|walking|exercise|wheez|phlegm|sputum|cough|breath)\b"),
+    "neurological": re.compile(r"\b(sudden|gradual|light|sound|vision|weak|numb|speech|stiff)\b"),
+    "digestive": re.compile(r"\b(eat|meal|stool|bowel|vomit|nausea|bloat|burning|cramp)\b"),
+    "urinary": re.compile(r"\b(urine|pee|burn|frequency|blood|flank|back|fever)\b"),
+    "skin_allergy": re.compile(r"\b(spread|itch|pain|blister|peel|swelling|new food|medicine)\b"),
+}
+
+
+def missing_details(message: str, category: str) -> list[str]:
+    """Return only the essential history fields still absent from the conversation."""
+    text = message.lower()
+    missing = []
+    if not DETAIL_PATTERNS["duration"].search(text):
+        missing.append("duration")
+    if not DETAIL_PATTERNS["severity"].search(text):
+        missing.append("severity")
+    if not DETAIL_PATTERNS["course"].search(text):
+        missing.append("course")
+    if not SAFETY_ANSWER_RE.search(text):
+        missing.append("safety")
+    category_pattern = CATEGORY_DETAIL_RE.get(category)
+    if category_pattern and not category_pattern.search(text):
+        missing.append("character")
+    if (
+        category == "infection" or any(term in text for term in ("fever", "temperature", "chills"))
+    ) and not DETAIL_PATTERNS["measurement"].search(text):
+        missing.append("measurement")
+    return missing
 
 
 def has_enough_initial_detail(message: str) -> bool:
     """True when an initial message already supplies multiple useful details."""
-    text = message.lower()
-    return sum(bool(pattern.search(text)) for pattern in DETAIL_PATTERNS.values()) >= 2
+    category = _category(message.lower())
+    missing = missing_details(message, category)
+    return "duration" not in missing and "severity" not in missing and len(missing) <= 2
 
 
 def should_ask_follow_up(
     message: str,
     triage: TriageResult,
     prior_user_messages: list[str] | None = None,
+    intake_rounds: int = 0,
 ) -> bool:
-    """Collect one focused history round unless urgency or detail makes it unnecessary."""
+    """Ask at most two focused rounds, stopping as soon as essentials are present."""
     prior_user_messages = prior_user_messages or []
     if triage.risk_level in (None, "emergency"):
         return False
-    if prior_user_messages:
+    if intake_rounds >= 2:
         return False
-    return not has_enough_initial_detail(message)
+    context = " ".join([*prior_user_messages, message])
+    missing = missing_details(context, triage.category)
+    if not missing:
+        return False
+    if intake_rounds == 0:
+        return not has_enough_initial_detail(context)
+    # A second round is reserved for genuinely incomplete replies, especially
+    # missing timing, severity, or a response to the red-flag safety screen.
+    return any(field in missing for field in ("duration", "severity", "safety"))
 
 
-def build_intake_response(message: str, triage: TriageResult) -> str:
-    temperature = (
-        " What is your measured temperature?"
-        if any(term in message.lower() for term in ("fever", "temperature", "chills"))
-        else ""
+def build_intake_response(
+    message: str,
+    triage: TriageResult,
+    missing: list[str] | None = None,
+    round_number: int = 1,
+) -> str:
+    missing = missing or missing_details(message, triage.category)
+    questions = []
+    if "duration" in missing or "severity" in missing or "course" in missing:
+        questions.append("When did it start, how strong is it from 0–10, and is it improving, worsening, constant, or coming and going?")
+    if "measurement" in missing:
+        questions.append("What is the measured temperature?")
+    if "character" in missing and triage.category == "cardiac":
+        questions.append("Where exactly is it, what does it feel like, and does breathing, movement, pressing the area, eating, or exertion change it?")
+    elif "character" in missing:
+        questions.append("Where is the problem and what does it feel like or look like?")
+    if "safety" in missing:
+        questions.append(triage.question)
+
+    heading = "**A few important questions**" if round_number == 1 else "**One last clarification**"
+    intro = (
+        "I want to understand this before assigning a risk level."
+        if round_number == 1
+        else "Your description helps, but a few safety details are still missing."
     )
-    return f"""**Before I assess this**
-I need a little more context so I do not give you a premature risk level.
+    question_text = "\n".join(f"- {question}" for question in questions[:3])
+    return f"""{heading}
+{intro}
 
-When did it start, how severe is it, and is it getting better or worse?{temperature}
+{question_text}
 
-**Safety check:** {triage.question}
-
-Please answer in one message. I’ll then summarize the situation, suggest next steps, and show the risk level at the end."""
+Please answer together in one message. If any symptom feels severe or rapidly worsening, seek urgent in-person care now."""
 
 
 def build_fallback_response(message: str, triage: TriageResult) -> str:
@@ -283,14 +387,30 @@ def build_fallback_response(message: str, triage: TriageResult) -> str:
     else:
         safety_section = ""
 
+    possibilities = POSSIBLE_CATEGORIES.get(
+        triage.category,
+        POSSIBLE_CATEGORIES["general"],
+    )
+    possibilities_text = "\n".join(f"- {item}" for item in possibilities)
+    warning_text = URGENT_WARNING_SIGNS.get(
+        triage.category,
+        URGENT_WARNING_SIGNS["general"],
+    )
+
     return f"""**Assessment**
-Based on the information provided, this is a safety-focused provisional triage assessment. More details are needed to understand the cause.
+Your symptoms can have several causes, and a chat cannot confirm which one is responsible. The safest next step depends on the pattern, severity, duration, and warning signs you reported.
 {safety_section}
 
-**What You Should Do**
+**What It Could Be**
+{possibilities_text}
+
+**What To Do Now**
 {triage.action}
 
-**Who to Contact**
+**Get Urgent Help Now If**
+{warning_text}
+
+**Who To Contact**
 {triage.specialist}
 
 **Risk Level:** {risk_text}
