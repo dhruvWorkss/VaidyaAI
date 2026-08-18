@@ -1,13 +1,22 @@
 from langchain_groq import ChatGroq
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
-from app.utils.config import GROQ_API_KEY, GROQ_MODEL
+from app.utils.config import GROQ_API_KEY, GROQ_MODEL, GROQ_FALLBACK_MODEL
 from app.rag.medical_rag import retrieve_medical_context
+import logging
 import re
+
+logger = logging.getLogger(__name__)
 
 llm = ChatGroq(
     api_key=GROQ_API_KEY,
     model_name=GROQ_MODEL,
     temperature=0.3
+)
+
+fallback_llm = ChatGroq(
+    api_key=GROQ_API_KEY,
+    model_name=GROQ_FALLBACK_MODEL,
+    temperature=0.2,
 )
 
 
@@ -118,6 +127,54 @@ def greeting_reply(message: str) -> str | None:
     return None
 
 
+def build_safe_fallback(risk_level: str | None, specialist: str | None) -> str:
+    """Provide conservative guidance when hosted AI services are unavailable."""
+    labels = {
+        "low": "🟢 Low",
+        "medium": "🟡 Medium",
+        "high": "🔴 High",
+        "emergency": "🚨 Emergency",
+    }
+
+    if risk_level == "emergency":
+        action = (
+            "Call your local emergency number or go to the nearest emergency "
+            "department now. Do not drive yourself if you feel faint or very unwell."
+        )
+    elif risk_level == "high":
+        action = (
+            "Please arrange urgent medical assessment today. If symptoms worsen, "
+            "seek emergency care immediately."
+        )
+    elif risk_level == "medium":
+        action = (
+            "Rest, stay hydrated if you can, and arrange a medical consultation "
+            "soon—especially if symptoms persist or worsen."
+        )
+    else:
+        action = (
+            "Monitor your symptoms, rest, and stay hydrated. Consult a clinician "
+            "if the problem persists, worsens, or worries you."
+        )
+
+    risk_text = labels.get(risk_level, "Not yet assessed")
+    specialist_text = specialist or "General Physician for initial evaluation"
+
+    return f"""**Assessment**
+I can provide basic safety guidance, but the detailed AI assessment is temporarily limited.
+
+**Risk Level:** {risk_text}
+
+**What You Should Do**
+{action}
+
+**Recommended Specialist**
+{specialist_text}
+
+---
+*This is not a diagnosis. Always consult a qualified doctor.*"""
+
+
 def run_triage_agent(user_message: str, chat_history: list = None) -> dict:
     """
     Runs one turn of triage. Returns the assistant reply plus the structured
@@ -132,7 +189,18 @@ def run_triage_agent(user_message: str, chat_history: list = None) -> dict:
         }
 
     chat_history = chat_history or []
-    medical_context = retrieve_medical_context(user_message)
+
+    symptom_keywords = ["pain", "fever", "cough", "vomit", "headache",
+                       "breath", "dizzy", "rash", "bleed", "chest"]
+    mentions_symptoms = any(kw in user_message.lower() for kw in symptom_keywords)
+    risk_level = assess_risk(user_message) if mentions_symptoms else None
+    specialist = recommend_specialist(user_message) if mentions_symptoms else None
+
+    try:
+        medical_context = retrieve_medical_context(user_message)
+    except Exception:
+        logger.exception("Medical context retrieval failed; continuing without RAG")
+        medical_context = "No specific medical context is currently available."
 
     system_prompt = f"""{SYSTEM_PROMPT}
 
@@ -151,15 +219,17 @@ Use the following medical knowledge to inform your response:
 
     messages.append(HumanMessage(content=user_message))
 
-    response = llm.invoke(messages)
-    ai_response = response.content
-
-    symptom_keywords = ["pain", "fever", "cough", "vomit", "headache",
-                       "breath", "dizzy", "rash", "bleed", "chest"]
-    mentions_symptoms = any(kw in user_message.lower() for kw in symptom_keywords)
-
-    risk_level = assess_risk(user_message) if mentions_symptoms else None
-    specialist = recommend_specialist(user_message) if mentions_symptoms else None
+    try:
+        response = llm.invoke(messages)
+        ai_response = response.content
+    except Exception:
+        logger.exception("Primary Groq model failed; trying fallback model")
+        try:
+            response = fallback_llm.invoke(messages)
+            ai_response = response.content
+        except Exception:
+            logger.exception("Fallback Groq model failed; using safe local guidance")
+            ai_response = build_safe_fallback(risk_level, specialist)
 
     # The model already states a risk level inside its structured reply, so the
     # keyword check is used only as a safety net: it prepends a banner when it
